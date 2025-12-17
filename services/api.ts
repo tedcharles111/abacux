@@ -1,0 +1,92 @@
+import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount } from '../types';
+
+// Mock Data
+const MOCK_USERS: User[] = [
+  {
+    id: 'u1',
+    email: 'user@abacusx.com',
+    fullName: 'Alex Trader',
+    role: UserRole.USER,
+    kycStatus: KYCStatus.VERIFIED,
+    balance: { btc: 0.05, eth: 1.2, usdt: 1540.00, usd: 50.00 },
+    twoFactorEnabled: true,
+    joinedAt: '2024-01-15T10:00:00Z',
+  },
+  {
+    id: 'u2',
+    email: 'newbie@abacusx.com',
+    fullName: 'Sarah Smith',
+    role: UserRole.USER,
+    kycStatus: KYCStatus.PENDING,
+    balance: { btc: 0, eth: 0, usdt: 0, usd: 0 },
+    twoFactorEnabled: false,
+    joinedAt: '2024-03-10T14:30:00Z',
+  },
+  {
+    id: 'a1',
+    email: 'admin@abacusx.com',
+    fullName: 'Sys Admin',
+    role: UserRole.ADMIN,
+    kycStatus: KYCStatus.VERIFIED,
+    balance: { btc: 0, eth: 0, usdt: 0, usd: 0 },
+    twoFactorEnabled: true,
+    joinedAt: '2023-11-01T09:00:00Z',
+  }
+];
+
+const MOCK_PLANS: InvestmentPlan[] = [
+  { id: 'p1', name: 'Stable Saver', apr: 5.5, durationDays: 30, minDeposit: 100, riskLevel: 'LOW', description: 'Low risk stablecoin yield farming.' },
+  { id: 'p2', name: 'Growth Alpha', apr: 12.0, durationDays: 90, minDeposit: 500, riskLevel: 'MEDIUM', description: 'Balanced crypto basket rebalancing.' },
+  { id: 'p3', name: 'Degen Yield', apr: 25.0, durationDays: 180, minDeposit: 1000, riskLevel: 'HIGH', description: 'High risk DeFi liquidity provision.' },
+];
+
+const MOCK_TRANSACTIONS: Transaction[] = [
+  { id: 'tx1', type: 'DEPOSIT', asset: 'BTC', amount: 0.05, status: 'COMPLETED', date: '2024-02-01', hash: '8f7d...9a2b' },
+  { id: 'tx2', type: 'INVESTMENT', asset: 'USDT', amount: 1000, status: 'COMPLETED', date: '2024-02-05' },
+  { id: 'tx3', type: 'RETURN', asset: 'USDT', amount: 12.50, status: 'COMPLETED', date: '2024-03-05' },
+];
+
+const MOCK_ACTIVE_INVESTMENTS: ActiveInvestment[] = [
+  { id: 'inv1', planId: 'p1', planName: 'Stable Saver', amount: 1000, startDate: '2024-02-05', endDate: '2024-03-06', accruedInterest: 4.58, status: 'ACTIVE' },
+];
+
+// Service Layer
+export const api = {
+  login: async (email: string, password: string): Promise<User> => {
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const user = MOCK_USERS.find(u => u.email === email);
+    if (!user) throw new Error('Invalid credentials');
+    return user;
+  },
+
+  getUsers: async (): Promise<User[]> => {
+    return MOCK_USERS;
+  },
+
+  getUser: async (id: string): Promise<User | undefined> => {
+    return MOCK_USERS.find(u => u.id === id);
+  },
+
+  updateUserDisplayAmount: async (userId: string, data: AdminDisplayAmount) => {
+    const user = MOCK_USERS.find(u => u.id === userId);
+    if (user) {
+      user.adminDisplayAdjustment = data;
+      // In a real app, if type === 'ledger_adjustment', we would update the balance here too
+      // but strictly following logic that requires dual approval for ledger changes, we might set it to pending.
+      // For this demo, we apply it immediately if 'ledger' just to show effect, 
+      // but cosmetically separate if 'cosmetic'.
+    }
+    return user;
+  },
+
+  getPlans: async () => MOCK_PLANS,
+  getTransactions: async (userId: string) => MOCK_TRANSACTIONS,
+  getActiveInvestments: async (userId: string) => MOCK_ACTIVE_INVESTMENTS,
+  
+  submitKYC: async (userId: string, formData: any) => {
+    const user = MOCK_USERS.find(u => u.id === userId);
+    if (user) user.kycStatus = KYCStatus.PENDING;
+    return true;
+  }
+};
