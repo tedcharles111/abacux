@@ -1,13 +1,20 @@
 import React, { useState } from 'react';
 import { Layout } from './components/Layout';
-import { User, UserRole } from './types';
-import { api } from './services/api';
+import { PublicLayout } from './components/PublicLayout';
+import { User } from './types';
 
-// Pages
+// Pages - Authenticated
 import { Dashboard } from './pages/Dashboard';
 import { AdminUserDetail } from './pages/admin/AdminUserDetail';
 
-// Mock components for less critical pages to save space
+// Pages - Public
+import { Home } from './pages/Home';
+import { About } from './pages/About';
+import { Support } from './pages/Support';
+import { Login } from './pages/Login';
+import { SignUp } from './pages/SignUp';
+
+// Mock components for less critical pages
 const PlaceholderPage: React.FC<{title: string}> = ({title}) => (
   <div className="text-white p-8 border border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center min-h-[400px]">
     <h2 className="text-2xl font-bold mb-4">{title}</h2>
@@ -19,75 +26,14 @@ const PlaceholderPage: React.FC<{title: string}> = ({title}) => (
   </div>
 );
 
-// Simple Login Page
-const Login: React.FC<{ onLogin: (u: User) => void }> = ({ onLogin }) => {
-  const [email, setEmail] = useState('admin@abacusx.com');
-  const [password, setPassword] = useState('password');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const user = await api.login(email, password);
-      onLogin(user);
-    } catch (err) {
-      setError('Invalid credentials. Try admin@abacusx.com');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-slate-900 p-8 rounded-2xl shadow-xl border border-slate-800">
-        <h1 className="text-3xl font-bold text-center text-white mb-2">AbacusX</h1>
-        <p className="text-center text-slate-400 mb-8">Sign in to your account</p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-slate-300">Email</label>
-            <input 
-              className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-slate-300">Password</label>
-            <input 
-              className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none"
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-            />
-          </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <button 
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors"
-          >
-            {loading ? 'Signing In...' : 'Sign In'}
-          </button>
-        </form>
-        <div className="mt-6 text-center text-xs text-slate-500">
-          <p>Demo Credentials:</p>
-          <p>User: user@abacusx.com</p>
-          <p>Admin: admin@abacusx.com</p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [page, setPage] = useState('dashboard');
+  
+  // Public Page State ('home', 'about', 'support', 'login', 'signup')
+  // Private Page State ('dashboard', 'wallet', 'invest', 'kyc', 'admin_*')
+  const [page, setPage] = useState('home'); 
   const [adminSelectedUserId, setAdminSelectedUserId] = useState<string | null>(null);
 
-  // Simple Router Logic
   const navigate = (p: string) => {
     setPage(p);
     // Reset admin selection if navigating away
@@ -96,11 +42,33 @@ export default function App() {
     }
   };
 
+  const handleLogin = (u: User) => {
+    setUser(u);
+    setPage('dashboard');
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setPage('home'); // Go back to landing page on logout
+  };
+
+  // --- UNAUTHENTICATED ROUTING ---
   if (!user) {
-    return <Login onLogin={setUser} />;
+    return (
+      <PublicLayout onNavigate={navigate} currentPage={page}>
+        {page === 'home' && <Home onNavigate={navigate} />}
+        {page === 'about' && <About />}
+        {page === 'support' && <Support />}
+        {page === 'login' && <Login onLogin={handleLogin} onNavigate={navigate} />}
+        {page === 'signup' && <SignUp onLogin={handleLogin} onNavigate={navigate} />}
+        {/* Fallback */}
+        {![ 'home', 'about', 'support', 'login', 'signup' ].includes(page) && <Home onNavigate={navigate} />}
+      </PublicLayout>
+    );
   }
 
-  const renderContent = () => {
+  // --- AUTHENTICATED ROUTING ---
+  const renderPrivateContent = () => {
     switch (page) {
       case 'dashboard':
         return <Dashboard user={user} onNavigate={navigate} />;
@@ -129,7 +97,6 @@ export default function App() {
            </div>
          );
       case 'admin_users':
-        // Inline Admin User List
         return (
           <div className="space-y-6">
             <h1 className="text-2xl font-bold text-white">User Management</h1>
@@ -187,8 +154,8 @@ export default function App() {
   };
 
   return (
-    <Layout user={user} onLogout={() => setUser(null)} currentPage={page} onNavigate={navigate}>
-      {renderContent()}
+    <Layout user={user} onLogout={handleLogout} currentPage={page} onNavigate={navigate}>
+      {renderPrivateContent()}
     </Layout>
   );
 }

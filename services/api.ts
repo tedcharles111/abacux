@@ -60,6 +60,26 @@ export const api = {
     return user;
   },
 
+  register: async (fullName: string, email: string, password: string): Promise<User> => {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Check if exists
+    if (MOCK_USERS.find(u => u.email === email)) {
+      throw new Error('User already exists');
+    }
+    const newUser: User = {
+      id: `u${MOCK_USERS.length + 1}`,
+      email,
+      fullName,
+      role: UserRole.USER,
+      kycStatus: KYCStatus.UNVERIFIED,
+      balance: { btc: 0, eth: 0, usdt: 0, usd: 0 },
+      twoFactorEnabled: false,
+      joinedAt: new Date().toISOString()
+    };
+    MOCK_USERS.push(newUser);
+    return newUser;
+  },
+
   getUsers: async (): Promise<User[]> => {
     return MOCK_USERS;
   },
@@ -72,10 +92,6 @@ export const api = {
     const user = MOCK_USERS.find(u => u.id === userId);
     if (user) {
       user.adminDisplayAdjustment = data;
-      // In a real app, if type === 'ledger_adjustment', we would update the balance here too
-      // but strictly following logic that requires dual approval for ledger changes, we might set it to pending.
-      // For this demo, we apply it immediately if 'ledger' just to show effect, 
-      // but cosmetically separate if 'cosmetic'.
     }
     return user;
   },
