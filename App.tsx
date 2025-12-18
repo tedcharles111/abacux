@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 import { User } from './types';
+import { LiveChatWidget } from './components/LiveChatWidget';
 
 // Pages - Authenticated
 import { Dashboard } from './pages/Dashboard';
@@ -80,74 +81,83 @@ export default function App() {
     navigate('home');
   };
 
-  // --- UNAUTHENTICATED ROUTING ---
-  if (!user) {
-    return (
-      <PublicLayout onNavigate={navigate} currentPage={page}>
-        {page === 'home' && <Home onNavigate={navigate} />}
-        {page === 'about' && <About />}
-        {page === 'support' && <Support />}
-        {page === 'login' && <Login onLogin={handleLogin} onNavigate={navigate} />}
-        {page === 'signup' && <SignUp onLogin={handleLogin} onNavigate={navigate} />}
-        {/* Fallback */}
-        {![ 'home', 'about', 'support', 'login', 'signup' ].includes(page) && <Home onNavigate={navigate} />}
-      </PublicLayout>
-    );
-  }
-
-  // --- AUTHENTICATED ROUTING ---
-  const renderPrivateContent = () => {
-    switch (page) {
-      case 'dashboard':
-        return <Dashboard user={user} onNavigate={navigate} />;
-      case 'wallet':
-        return <PlaceholderPage title="Wallet & Deposits" />;
-      case 'invest':
-        return <PlaceholderPage title="Investment Plans" />;
-      case 'kyc':
-        return <PlaceholderPage title="Identity Verification" />;
-      
-      // Admin Routes
-      case 'admin_dashboard':
-         return (
-           <div className="space-y-6">
-             <h1 className="text-2xl font-bold text-white">Admin Overview</h1>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                  <h3 className="text-slate-400 text-sm">Total Assets</h3>
-                  <p className="text-2xl font-bold text-white mt-2">$2.4M</p>
-                </div>
-                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                  <h3 className="text-slate-400 text-sm">Active Users</h3>
-                  <p className="text-2xl font-bold text-white mt-2">1,245</p>
-                </div>
-             </div>
-           </div>
-         );
-      case 'admin_users':
-        return (
-          <AdminUsers 
-            onNavigate={navigate} 
-            onSelectUser={(userId) => {
-              setAdminSelectedUserId(userId);
-              setPage('admin_user_detail');
-            }} 
-          />
-        );
-      case 'admin_user_detail':
-        return adminSelectedUserId ? (
-          <AdminUserDetail userId={adminSelectedUserId} onBack={() => navigate('admin_users')} />
-        ) : (
-          <div>Error: No user selected</div>
-        );
-      default:
-        return <Dashboard user={user} onNavigate={navigate} />;
+  const renderContent = () => {
+     // --- UNAUTHENTICATED ROUTING ---
+    if (!user) {
+      return (
+        <PublicLayout onNavigate={navigate} currentPage={page}>
+          {page === 'home' && <Home onNavigate={navigate} />}
+          {page === 'about' && <About />}
+          {page === 'support' && <Support />}
+          {page === 'login' && <Login onLogin={handleLogin} onNavigate={navigate} />}
+          {page === 'signup' && <SignUp onLogin={handleLogin} onNavigate={navigate} />}
+          {/* Fallback */}
+          {![ 'home', 'about', 'support', 'login', 'signup' ].includes(page) && <Home onNavigate={navigate} />}
+        </PublicLayout>
+      );
     }
+
+    // --- AUTHENTICATED ROUTING ---
+    const renderPrivateContent = () => {
+      switch (page) {
+        case 'dashboard':
+          return <Dashboard user={user} onNavigate={navigate} />;
+        case 'wallet':
+          return <PlaceholderPage title="Wallet & Deposits" />;
+        case 'invest':
+          return <PlaceholderPage title="Investment Plans" />;
+        case 'kyc':
+          return <PlaceholderPage title="Identity Verification" />;
+        
+        // Admin Routes
+        case 'admin_dashboard':
+           return (
+             <div className="space-y-6">
+               <h1 className="text-2xl font-bold text-white">Admin Overview</h1>
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                    <h3 className="text-slate-400 text-sm">Total Assets</h3>
+                    <p className="text-2xl font-bold text-white mt-2">$2.4M</p>
+                  </div>
+                  <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+                    <h3 className="text-slate-400 text-sm">Active Users</h3>
+                    <p className="text-2xl font-bold text-white mt-2">1,245</p>
+                  </div>
+               </div>
+             </div>
+           );
+        case 'admin_users':
+          return (
+            <AdminUsers 
+              onNavigate={navigate} 
+              onSelectUser={(userId) => {
+                setAdminSelectedUserId(userId);
+                setPage('admin_user_detail');
+              }} 
+            />
+          );
+        case 'admin_user_detail':
+          return adminSelectedUserId ? (
+            <AdminUserDetail userId={adminSelectedUserId} onBack={() => navigate('admin_users')} />
+          ) : (
+            <div>Error: No user selected</div>
+          );
+        default:
+          return <Dashboard user={user} onNavigate={navigate} />;
+      }
+    };
+
+    return (
+      <Layout user={user} onLogout={handleLogout} currentPage={page} onNavigate={navigate}>
+        {renderPrivateContent()}
+      </Layout>
+    );
   };
 
   return (
-    <Layout user={user} onLogout={handleLogout} currentPage={page} onNavigate={navigate}>
-      {renderPrivateContent()}
-    </Layout>
+    <>
+      {renderContent()}
+      <LiveChatWidget />
+    </>
   );
 }

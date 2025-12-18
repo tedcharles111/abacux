@@ -10,6 +10,11 @@ export const Support: React.FC = () => {
     setSent(true);
   };
 
+  const triggerLiveChat = () => {
+    const event = new CustomEvent('open-live-chat');
+    window.dispatchEvent(event);
+  };
+
   return (
     <div className="py-16">
       <div className="max-w-3xl mx-auto px-4">
@@ -18,18 +23,21 @@ export const Support: React.FC = () => {
 
         {/* Contact Options */}
         <div className="grid md:grid-cols-3 gap-6 mb-16">
-           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer">
-             <MessageCircle className="mx-auto text-blue-400 mb-4" size={32} />
+           <div 
+             onClick={triggerLiveChat}
+             className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer group"
+           >
+             <MessageCircle className="mx-auto text-blue-400 mb-4 group-hover:scale-110 transition-transform" size={32} />
              <h3 className="text-white font-bold">Live Chat</h3>
              <p className="text-sm text-slate-500 mt-2">Available 24/7</p>
            </div>
-           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer">
-             <Mail className="mx-auto text-purple-400 mb-4" size={32} />
+           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer group">
+             <Mail className="mx-auto text-purple-400 mb-4 group-hover:scale-110 transition-transform" size={32} />
              <h3 className="text-white font-bold">Email Us</h3>
              <p className="text-sm text-slate-500 mt-2">Response in 24h</p>
            </div>
-           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer">
-             <FileText className="mx-auto text-green-400 mb-4" size={32} />
+           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer group">
+             <FileText className="mx-auto text-green-400 mb-4 group-hover:scale-110 transition-transform" size={32} />
              <h3 className="text-white font-bold">Docs</h3>
              <p className="text-sm text-slate-500 mt-2">Read guides</p>
            </div>
