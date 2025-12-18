@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 import { User } from './types';
@@ -34,22 +34,49 @@ export default function App() {
   const [page, setPage] = useState('home'); 
   const [adminSelectedUserId, setAdminSelectedUserId] = useState<string | null>(null);
 
+  // Sync state with URL hash for better navigation experience
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash) {
+        // Handle admin sub-routes if needed, or just top level
+        if (!user && ['dashboard', 'wallet'].includes(hash)) {
+          // If trying to access private route while logged out, redirect to login
+          setPage('login');
+        } else {
+          setPage(hash);
+        }
+      }
+    };
+
+    // Initialize from hash
+    if (window.location.hash.slice(1)) {
+      handleHashChange();
+    } else {
+      window.location.hash = 'home';
+    }
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [user]);
+
   const navigate = (p: string) => {
     setPage(p);
     // Reset admin selection if navigating away
     if (!p.startsWith('admin_user_detail')) {
       setAdminSelectedUserId(null);
+      window.location.hash = p;
     }
   };
 
   const handleLogin = (u: User) => {
     setUser(u);
-    setPage('dashboard');
+    navigate('dashboard');
   };
 
   const handleLogout = () => {
     setUser(null);
-    setPage('home'); // Go back to landing page on logout
+    navigate('home');
   };
 
   // --- UNAUTHENTICATED ROUTING ---
