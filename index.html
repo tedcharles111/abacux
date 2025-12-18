@@ -23,6 +23,21 @@
                 warning: '#f59e0b',
                 danger: '#ef4444',
               }
+            },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-20px)' },
+              },
+              marquee: {
+                '0%': { transform: 'translateX(0)' },
+                '100%': { transform: 'translateX(-50%)' },
+              }
+            },
+            animation: {
+              float: 'float 6s ease-in-out infinite',
+              marquee: 'marquee 30s linear infinite',
+              'bounce-slow': 'bounce 3s infinite',
             }
           }
         }

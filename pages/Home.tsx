@@ -377,7 +377,7 @@ export const Home: React.FC<{ onNavigate: (page: string) => void }> = ({ onNavig
            <div className="grid md:grid-cols-2 gap-16 items-center">
              <div className="order-2 md:order-1 relative">
                 {/* Abstract Phone Mockup */}
-                <div className="relative mx-auto w-[300px] h-[600px] bg-slate-950 rounded-[3rem] border-8 border-slate-800 shadow-2xl overflow-hidden">
+                <div className="relative mx-auto w-[300px] h-[600px] bg-slate-950 rounded-[3rem] border-8 border-slate-800 shadow-2xl overflow-hidden animate-float">
                    <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-40 h-6 bg-slate-800 rounded-b-xl z-20"></div>
                    <div className="w-full h-full bg-slate-900 p-6 flex flex-col relative">
                       {/* Fake App UI */}
