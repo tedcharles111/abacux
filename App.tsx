@@ -6,6 +6,7 @@ import { User } from './types';
 // Pages - Authenticated
 import { Dashboard } from './pages/Dashboard';
 import { AdminUserDetail } from './pages/admin/AdminUserDetail';
+import { AdminUsers } from './pages/admin/AdminUsers';
 
 // Pages - Public
 import { Home } from './pages/Home';
@@ -125,49 +126,13 @@ export default function App() {
          );
       case 'admin_users':
         return (
-          <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-white">User Management</h1>
-            <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-slate-900/50 uppercase text-xs font-semibold text-slate-500">
-                   <tr>
-                     <th className="px-6 py-4">Name</th>
-                     <th className="px-6 py-4">Role</th>
-                     <th className="px-6 py-4">Balance (Est)</th>
-                     <th className="px-6 py-4">Action</th>
-                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700">
-                  <tr className="hover:bg-slate-700/50 transition-colors">
-                    <td className="px-6 py-4">Alex Trader (Demo User)</td>
-                    <td className="px-6 py-4"><span className="bg-blue-900/50 text-blue-400 px-2 py-1 rounded text-xs">USER</span></td>
-                    <td className="px-6 py-4">$45,231</td>
-                    <td className="px-6 py-4">
-                      <button 
-                        onClick={() => { setAdminSelectedUserId('u1'); setPage('admin_user_detail'); }}
-                        className="text-blue-400 hover:text-white"
-                      >
-                        Manage
-                      </button>
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-slate-700/50 transition-colors">
-                    <td className="px-6 py-4">Sarah Smith</td>
-                    <td className="px-6 py-4"><span className="bg-blue-900/50 text-blue-400 px-2 py-1 rounded text-xs">USER</span></td>
-                    <td className="px-6 py-4">$0.00</td>
-                    <td className="px-6 py-4">
-                       <button 
-                        onClick={() => { setAdminSelectedUserId('u2'); setPage('admin_user_detail'); }}
-                        className="text-blue-400 hover:text-white"
-                      >
-                        Manage
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AdminUsers 
+            onNavigate={navigate} 
+            onSelectUser={(userId) => {
+              setAdminSelectedUserId(userId);
+              setPage('admin_user_detail');
+            }} 
+          />
         );
       case 'admin_user_detail':
         return adminSelectedUserId ? (
