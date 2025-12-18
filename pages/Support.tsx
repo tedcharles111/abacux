@@ -58,7 +58,7 @@ export const Support: React.FC = () => {
                 How do I verify my identity?
                 <span className="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
               </summary>
-              <p className="mt-4 text-slate-400">Go to Settings > Identity Verification and upload your government ID.</p>
+              <p className="mt-4 text-slate-400">Go to Settings &gt; Identity Verification and upload your government ID.</p>
             </details>
           </div>
         </div>
