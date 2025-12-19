@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
@@ -8,6 +9,7 @@ import { LiveChatWidget } from './components/LiveChatWidget';
 import { Dashboard } from './pages/Dashboard';
 import { AdminUserDetail } from './pages/admin/AdminUserDetail';
 import { AdminUsers } from './pages/admin/AdminUsers';
+import { AdminSupport } from './pages/admin/AdminSupport';
 
 // Pages - Public
 import { Home } from './pages/Home';
@@ -16,59 +18,37 @@ import { Support } from './pages/Support';
 import { Login } from './pages/Login';
 import { SignUp } from './pages/SignUp';
 
-// Mock components for less critical pages
 const PlaceholderPage: React.FC<{title: string}> = ({title}) => (
   <div className="text-white p-8 border border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center min-h-[400px]">
     <h2 className="text-2xl font-bold mb-4">{title}</h2>
     <p className="text-slate-400 mb-6">This module is part of the full implementation.</p>
-    <div className="flex space-x-4">
-      <button className="px-4 py-2 bg-slate-800 rounded text-sm hover:bg-slate-700">View Spec</button>
-      <button className="px-4 py-2 bg-slate-800 rounded text-sm hover:bg-slate-700">Mock Action</button>
-    </div>
   </div>
 );
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  
-  // Public Page State ('home', 'about', 'support', 'login', 'signup')
-  // Private Page State ('dashboard', 'wallet', 'invest', 'kyc', 'admin_*')
   const [page, setPage] = useState('home'); 
   const [adminSelectedUserId, setAdminSelectedUserId] = useState<string | null>(null);
 
-  // Sync state with URL hash for better navigation experience
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
       if (hash) {
-        // Handle admin sub-routes if needed, or just top level
-        if (!user && ['dashboard', 'wallet'].includes(hash)) {
-          // If trying to access private route while logged out, redirect to login
-          setPage('login');
-        } else {
-          setPage(hash);
-        }
+        setPage(hash);
       }
     };
-
-    // Initialize from hash
-    if (window.location.hash.slice(1)) {
-      handleHashChange();
-    } else {
-      window.location.hash = 'home';
-    }
-
+    if (window.location.hash.slice(1)) handleHashChange();
+    else window.location.hash = 'home';
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [user]);
+  }, []);
 
   const navigate = (p: string) => {
     setPage(p);
-    // Reset admin selection if navigating away
     if (!p.startsWith('admin_user_detail')) {
       setAdminSelectedUserId(null);
-      window.location.hash = p;
     }
+    window.location.hash = p;
   };
 
   const handleLogin = (u: User) => {
@@ -82,7 +62,6 @@ export default function App() {
   };
 
   const renderContent = () => {
-     // --- UNAUTHENTICATED ROUTING ---
     if (!user) {
       return (
         <PublicLayout onNavigate={navigate} currentPage={page}>
@@ -91,25 +70,17 @@ export default function App() {
           {page === 'support' && <Support />}
           {page === 'login' && <Login onLogin={handleLogin} onNavigate={navigate} />}
           {page === 'signup' && <SignUp onLogin={handleLogin} onNavigate={navigate} />}
-          {/* Fallback */}
           {![ 'home', 'about', 'support', 'login', 'signup' ].includes(page) && <Home onNavigate={navigate} />}
         </PublicLayout>
       );
     }
 
-    // --- AUTHENTICATED ROUTING ---
     const renderPrivateContent = () => {
       switch (page) {
-        case 'dashboard':
-          return <Dashboard user={user} onNavigate={navigate} />;
-        case 'wallet':
-          return <PlaceholderPage title="Wallet & Deposits" />;
-        case 'invest':
-          return <PlaceholderPage title="Investment Plans" />;
-        case 'kyc':
-          return <PlaceholderPage title="Identity Verification" />;
-        
-        // Admin Routes
+        case 'dashboard': return <Dashboard user={user} onNavigate={navigate} />;
+        case 'wallet': return <PlaceholderPage title="Wallet & Deposits" />;
+        case 'invest': return <PlaceholderPage title="Investment Plans" />;
+        case 'kyc': return <PlaceholderPage title="Identity Verification" />;
         case 'admin_dashboard':
            return (
              <div className="space-y-6">
@@ -132,7 +103,7 @@ export default function App() {
               onNavigate={navigate} 
               onSelectUser={(userId) => {
                 setAdminSelectedUserId(userId);
-                setPage('admin_user_detail');
+                navigate('admin_user_detail');
               }} 
             />
           );
@@ -142,6 +113,8 @@ export default function App() {
           ) : (
             <div>Error: No user selected</div>
           );
+        case 'admin_support':
+          return <AdminSupport />;
         default:
           return <Dashboard user={user} onNavigate={navigate} />;
       }
@@ -157,7 +130,7 @@ export default function App() {
   return (
     <>
       {renderContent()}
-      <LiveChatWidget />
+      <LiveChatWidget user={user} />
     </>
   );
 }
