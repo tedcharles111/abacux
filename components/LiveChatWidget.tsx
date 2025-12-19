@@ -1,92 +1,178 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Minus, ShieldCheck, Headset, Paperclip, FileText, Wifi } from 'lucide-react';
+import { X, Send, Minus, ShieldCheck, Headset, Mic, MicOff, Wifi, Volume2 } from 'lucide-react';
 import { supportService, ChatMessage } from '../services/support';
 import { User } from '../types';
-import { GoogleGenAI, Chat } from "@google/genai";
+import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
+
+// Helper for Base64 (Manual implementation as per guidelines)
+function encode(bytes: Uint8Array) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function decode(base64: string) {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number,
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const channelData = buffer.getChannelData(channel);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+    }
+  }
+  return buffer;
+}
 
 export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [isSynced, setIsSynced] = useState(true);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const chatSessionRef = useRef<Chat | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const outAudioContextRef = useRef<AudioContext | null>(null);
+  const sessionRef = useRef<any>(null);
+  const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const nextStartTimeRef = useRef<number>(0);
 
   const userId = user?.id || 'anonymous_guest';
   const userName = user?.fullName || 'Guest User';
 
-  const initAi = () => {
-    if (chatSessionRef.current) return;
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-    chatSessionRef.current = ai.chats.create({
-      model: 'gemini-3-flash-preview',
-      config: {
-        systemInstruction: `You are David, AbacusX Senior Concierge. 
-        Tone: Elite, security-focused, extremely helpful.
-        Greet the user and let them know a Human Admin has also been paged to this session.`,
-      },
-    });
-  };
-
   useEffect(() => {
     const syncChat = () => {
-      setIsSynced(false);
       const ticket = supportService.getTicket(userId);
       if (ticket) setMessages([...ticket.messages]);
-      setTimeout(() => setIsSynced(true), 200);
     };
-
     syncChat();
     window.addEventListener('support_sync_update', syncChat);
     const handleOpen = () => setIsOpen(true);
     window.addEventListener('open-live-chat', handleOpen);
-    
     return () => {
       window.removeEventListener('support_sync_update', syncChat);
       window.removeEventListener('open-live-chat', handleOpen);
+      stopVoice();
     };
   }, [userId]);
 
   useEffect(() => {
     if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping, isOpen]);
+  }, [messages, isOpen]);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!inputValue.trim()) return;
+  const startVoice = async () => {
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+      outAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const outputNode = outAudioContextRef.current.createGain();
+      outputNode.connect(outAudioContextRef.current.destination);
 
-    const text = inputValue;
-    setInputValue('');
-    
-    // 1. Instantly dispatch message to the Live Gateway
-    supportService.sendMessage(userId, userName, text, true);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const sessionPromise = ai.live.connect({
+        model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+        callbacks: {
+          onopen: () => {
+            setIsVoiceActive(true);
+            const source = audioContextRef.current!.createMediaStreamSource(stream);
+            const scriptProcessor = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
+            scriptProcessor.onaudioprocess = (e) => {
+              const inputData = e.inputBuffer.getChannelData(0);
+              const l = inputData.length;
+              const int16 = new Int16Array(l);
+              for (let i = 0; i < l; i++) int16[i] = inputData[i] * 32768;
+              const pcmBlob: Blob = {
+                data: encode(new Uint8Array(int16.buffer)),
+                mimeType: 'audio/pcm;rate=16000',
+              };
+              sessionPromise.then(s => s.sendRealtimeInput({ media: pcmBlob }));
+            };
+            source.connect(scriptProcessor);
+            scriptProcessor.connect(audioContextRef.current!.destination);
+          },
+          onmessage: async (message: LiveServerMessage) => {
+            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            if (base64Audio && outAudioContextRef.current) {
+              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outAudioContextRef.current.currentTime);
+              const buffer = await decodeAudioData(decode(base64Audio), outAudioContextRef.current, 24000, 1);
+              const source = outAudioContextRef.current.createBufferSource();
+              source.buffer = buffer;
+              source.connect(outputNode);
+              source.addEventListener('ended', () => sourcesRef.current.delete(source));
+              source.start(nextStartTimeRef.current);
+              nextStartTimeRef.current += buffer.duration;
+              sourcesRef.current.add(source);
+            }
 
-    // 2. AI First-Responder logic (silences if admin is present)
-    const ticket = supportService.getTicket(userId);
-    if (ticket?.isAiEnabled) {
-      setIsTyping(true);
-      try {
-        initAi();
-        const result = await chatSessionRef.current!.sendMessage({ message: text });
-        supportService.sendMessage(userId, userName, result.text || "One moment while I process your request.", false, { isAi: true });
-        setIsTyping(false);
-      } catch (err) {
-        setIsTyping(false);
-      }
+            if (message.serverContent?.outputTranscription) {
+               // Optional: Show transcription in chat
+               const text = message.serverContent.outputTranscription.text;
+               if (message.serverContent?.turnComplete) {
+                 supportService.sendMessage(userId, 'Concierge', text, false, { isAi: true });
+               }
+            }
+
+            if (message.serverContent?.interrupted) {
+              sourcesRef.current.forEach(s => s.stop());
+              sourcesRef.current.clear();
+              nextStartTimeRef.current = 0;
+            }
+          },
+          onclose: () => setIsVoiceActive(false),
+          onerror: (e) => console.error("Live Error", e),
+        },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
+          systemInstruction: 'You are David, AbacusX Senior Financial Concierge. Provide real-time assistance. Speak clearly and concisely.',
+          outputAudioTranscription: {},
+        }
+      });
+
+      sessionRef.current = await sessionPromise;
+    } catch (err) {
+      console.error("Failed to start Live API", err);
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    supportService.sendMessage(userId, userName, `Uploaded: ${file.name}`, true, { 
-      attachment: { name: file.name, type: file.type, size: file.size, mimeType: file.type } 
-    });
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const stopVoice = () => {
+    if (sessionRef.current) {
+      sessionRef.current.close();
+      sessionRef.current = null;
+    }
+    if (audioContextRef.current) audioContextRef.current.close();
+    if (outAudioContextRef.current) outAudioContextRef.current.close();
+    setIsVoiceActive(false);
+  };
+
+  const handleSendMessage = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!inputValue.trim()) return;
+    supportService.sendMessage(userId, userName, inputValue, true);
+    setInputValue('');
   };
 
   return (
@@ -95,83 +181,75 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
         className={`pointer-events-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-80 sm:w-96 flex flex-col transition-all duration-300 origin-bottom-right overflow-hidden ${
           isOpen ? 'scale-100 opacity-100 mb-4' : 'scale-0 opacity-0 mb-0 h-0'
         }`}
-        style={{ maxHeight: '600px', height: '520px' }}
+        style={{ height: '520px' }}
       >
-        <div className="bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center shadow-lg">
+        <div className="bg-slate-800 border-b border-slate-700 p-4 flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-xl relative">
               <ShieldCheck size={20} />
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-slate-800 rounded-full"></div>
+              {isVoiceActive && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping"></div>}
             </div>
             <div>
-              <h3 className="font-bold text-white text-sm">AbacusX Support</h3>
-              <div className={`flex items-center px-1.5 py-0.5 rounded text-[8px] font-black tracking-widest ${isSynced ? 'text-green-400' : 'text-blue-400'}`}>
-                <Wifi size={10} className="mr-1" /> ENCRYPTED {isSynced ? 'CONNECTED' : 'SYNCING'}
+              <h3 className="font-bold text-white text-sm">AbacusX Live</h3>
+              <div className="flex items-center text-[8px] text-green-400 font-black uppercase tracking-widest">
+                <Wifi size={10} className="mr-1" /> {isVoiceActive ? 'Voice Encrypted' : 'Encrypted Session'}
               </div>
             </div>
           </div>
-          <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+          <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white">
             <Minus size={20} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900 scrollbar-thin">
-          {messages.length === 0 && (
-            <div className="text-center py-10 px-6">
-               <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-700">
-                  <Headset className="text-blue-500" size={24} />
-               </div>
-               <p className="text-xs text-slate-400 font-medium">Priority Support line established. An administrator is monitoring this session. How can we help?</p>
-            </div>
-          )}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900">
           {messages.map((msg) => (
             <div key={msg.id} className={`flex ${msg.isFromUser ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-xl ${
+              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
                 msg.isFromUser ? 'bg-blue-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
               }`}>
-                {msg.isAi && <span className="text-[8px] uppercase font-black text-blue-400 block mb-1">Concierge Dispatch</span>}
-                {!msg.isAi && !msg.isFromUser && <span className="text-[8px] uppercase font-black text-indigo-400 block mb-1">Senior Administrator</span>}
-                
-                {msg.attachment && (
-                  <div className="flex items-center space-x-3 bg-slate-950/50 p-3 rounded-xl border border-white/5 mb-2">
-                    <FileText size={18} className="text-blue-400" />
-                    <span className="text-[10px] font-bold truncate flex-1">{msg.attachment.name}</span>
-                  </div>
-                )}
-                
-                <p className="leading-relaxed">{msg.text}</p>
-                <p className="text-[8px] mt-2 opacity-30 text-right font-mono italic">{new Date(msg.timestamp).toLocaleTimeString()}</p>
+                {msg.isAi && <span className="text-[8px] uppercase font-black text-blue-400 block mb-1">Live Concierge</span>}
+                <p>{msg.text}</p>
               </div>
             </div>
           ))}
-          {isTyping && <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest ml-2 animate-pulse">Staff is typing...</div>}
+          {isVoiceActive && (
+            <div className="flex justify-center py-4">
+               <div className="flex items-center space-x-1">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="w-1 bg-blue-500 rounded-full animate-bounce" style={{ height: `${Math.random() * 20 + 5}px`, animationDelay: `${i * 0.1}s` }}></div>
+                  ))}
+               </div>
+               <span className="ml-3 text-[10px] text-blue-400 font-bold uppercase">Streaming Audio...</span>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
         <div className="p-4 bg-slate-800 border-t border-slate-700">
-          <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
-            <div className="relative flex-1">
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={isVoiceActive ? stopVoice : startVoice}
+              className={`p-3 rounded-xl transition-all shadow-lg flex items-center justify-center ${isVoiceActive ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-slate-900 hover:bg-slate-700 text-blue-400 border border-slate-700'}`}
+            >
+              {isVoiceActive ? <MicOff size={20} /> : <Mic size={20} />}
+            </button>
+            <form onSubmit={handleSendMessage} className="flex-1 flex space-x-2">
               <input
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Secure message..."
-                className="w-full bg-slate-950 text-white rounded-xl pl-4 pr-10 py-3 border border-slate-700 focus:border-blue-500 text-sm outline-none shadow-inner"
+                placeholder="Message concierge..."
+                className="flex-1 bg-slate-950 text-white rounded-xl px-4 py-3 border border-slate-700 focus:border-blue-500 text-sm outline-none"
               />
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-blue-400">
-                <Paperclip size={18} />
+              <button type="submit" className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 shadow-lg">
+                <Send size={18} />
               </button>
-              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
-            </div>
-            <button type="submit" className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all shadow-lg active:scale-95">
-              <Send size={18} />
-            </button>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
 
-      <button onClick={() => setIsOpen(!isOpen)} className={`pointer-events-auto h-16 w-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 relative ${isOpen ? 'bg-slate-800 scale-90' : 'bg-blue-600 hover:bg-blue-500'}`}>
-        <div className="absolute inset-0 bg-blue-400/10 rounded-full animate-ping opacity-20"></div>
+      <button onClick={() => setIsOpen(!isOpen)} className={`pointer-events-auto h-16 w-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 relative ${isOpen ? 'bg-slate-800' : 'bg-blue-600'}`}>
         {isOpen ? <X size={28} className="text-white" /> : <Headset size={28} className="text-white" />}
       </button>
     </div>

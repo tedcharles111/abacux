@@ -2,6 +2,7 @@
   "name": "AbacusX",
   "description": "A production-ready crypto investment platform featuring secure wallets, investment plans, KYC compliance, and a comprehensive admin panel for ledger management.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone"
   ]
 }
