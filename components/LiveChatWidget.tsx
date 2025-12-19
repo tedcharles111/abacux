@@ -1,11 +1,19 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Minus, User as UserIcon, ShieldCheck, Headset } from 'lucide-react';
+import { MessageCircle, X, Send, Minus, User as UserIcon, ShieldCheck, Headset, Paperclip, FileText, File, Image as ImageIcon } from 'lucide-react';
 import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
+
+interface FileAttachment {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl?: string;
+}
 
 interface Message {
   id: string;
-  text: string;
+  text?: string;
+  attachment?: FileAttachment;
   sender: 'user' | 'agent' | 'system';
   timestamp: Date;
 }
@@ -27,6 +35,7 @@ export const LiveChatWidget: React.FC = () => {
   const [isWaitingForAgent, setIsWaitingForAgent] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatSessionRef = useRef<Chat | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize Gemini Chat Session
   const initChat = () => {
@@ -40,6 +49,7 @@ export const LiveChatWidget: React.FC = () => {
         Users chatting with you are often high-net-worth investors or new users seeking security. 
         Provide clear, concise, and accurate information about crypto investments, KYC, and security. 
         Always prioritize user safety and mention AbacusX's institutional-grade security. 
+        If a user uploads a document, acknowledge that you have received the file and will review it for their request.
         Keep responses relatively short (under 3 sentences unless complex). 
         Do not use markdown like bolding or lists unless absolutely necessary for clarity.`,
       },
@@ -58,6 +68,77 @@ export const LiveChatWidget: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping, isOpen]);
 
+  const handleFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Create attachment object
+    const attachment: FileAttachment = {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    };
+
+    // If it's an image, we could store a preview, but for "any document" we show a generic bubble
+    const newUserMsg: Message = {
+      id: Date.now().toString(),
+      attachment: attachment,
+      sender: 'user',
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, newUserMsg]);
+    setIsTyping(true);
+
+    // Trigger admin flow if not connected
+    if (!isAgentConnected && !isWaitingForAgent) {
+      await simulateAgentConnection(`I have uploaded a document: ${file.name}`);
+    } else if (isAgentConnected) {
+      await getAdminResponse(`The user has uploaded a file named: ${file.name}`);
+    }
+
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const simulateAgentConnection = async (initialQuery: string) => {
+    setIsWaitingForAgent(true);
+    
+    setTimeout(() => {
+      setMessages(prev => [...prev, {
+        id: 'sys-1',
+        text: "Connecting you to a senior administrator...",
+        sender: 'system',
+        timestamp: new Date()
+      }]);
+    }, 800);
+
+    setTimeout(() => {
+      setMessages(prev => [...prev, {
+        id: 'sys-2',
+        text: "Our administrators are currently in high-volume sessions. Please stay on the line, your request is being prioritized.",
+        sender: 'system',
+        timestamp: new Date()
+      }]);
+    }, 3000);
+
+    setTimeout(async () => {
+      setMessages(prev => [...prev, {
+        id: 'sys-3',
+        text: "Senior Administrator David has joined the chat.",
+        sender: 'system',
+        timestamp: new Date()
+      }]);
+      setIsAgentConnected(true);
+      setIsWaitingForAgent(false);
+      await getAdminResponse(initialQuery);
+    }, 6000);
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!inputValue.trim()) return;
@@ -74,45 +155,9 @@ export const LiveChatWidget: React.FC = () => {
     setInputValue('');
     setIsTyping(true);
 
-    // Initial sequence for first-time message in session
     if (!isAgentConnected && !isWaitingForAgent) {
-      setIsWaitingForAgent(true);
-      
-      // Phase 1: Immediate System Acknowledgment
-      setTimeout(() => {
-        setMessages(prev => [...prev, {
-          id: 'sys-1',
-          text: "Connecting you to a senior administrator...",
-          sender: 'system',
-          timestamp: new Date()
-        }]);
-      }, 800);
-
-      // Phase 2: The "Keep Patient" auto-response (Admin isn't active yet)
-      setTimeout(() => {
-        setMessages(prev => [...prev, {
-          id: 'sys-2',
-          text: "Our administrators are currently in high-volume sessions. Please stay on the line, your request is being prioritized.",
-          sender: 'system',
-          timestamp: new Date()
-        }]);
-      }, 3000);
-
-      // Phase 3: Admin "Connects" and Gemini responds
-      setTimeout(async () => {
-        setMessages(prev => [...prev, {
-          id: 'sys-3',
-          text: "Senior Administrator David has joined the chat.",
-          sender: 'system',
-          timestamp: new Date()
-        }]);
-        setIsAgentConnected(true);
-        setIsWaitingForAgent(false);
-        await getAdminResponse(userText);
-      }, 6000);
-
+      await simulateAgentConnection(userText);
     } else if (isAgentConnected) {
-      // Direct chat with Gemini (Admin David)
       await getAdminResponse(userText);
     }
   };
@@ -137,10 +182,23 @@ export const LiveChatWidget: React.FC = () => {
       }
     } catch (error) {
       console.error("Gemini Chat Error:", error);
-      // Removed the technical error message as the system auto-response flow is sufficient
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const getFileIcon = (type: string) => {
+    if (type.startsWith('image/')) return <ImageIcon size={20} className="text-blue-400" />;
+    if (type.includes('pdf')) return <FileText size={20} className="text-red-400" />;
+    return <File size={20} className="text-slate-400" />;
   };
 
   return (
@@ -202,7 +260,19 @@ export const LiveChatWidget: React.FC = () => {
                       : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
                   }`}
                 >
-                  {msg.text}
+                  {msg.attachment ? (
+                    <div className="flex items-center space-x-3 bg-slate-900/40 p-2 rounded-lg border border-white/10">
+                      <div className="bg-slate-950 p-2 rounded-md">
+                        {getFileIcon(msg.attachment.type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold truncate">{msg.attachment.name}</p>
+                        <p className="text-[10px] opacity-70 uppercase">{formatFileSize(msg.attachment.size)}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    msg.text
+                  )}
                   <div className={`text-[10px] mt-1 opacity-50 ${msg.sender === 'user' ? 'text-right' : 'text-left'}`}>
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
@@ -225,18 +295,34 @@ export const LiveChatWidget: React.FC = () => {
 
         {/* Input Area */}
         <div className="p-4 bg-slate-900 border-t border-slate-800 shrink-0">
-          <form onSubmit={handleSendMessage} className="relative">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Inquire with an administrator..."
-              className="w-full bg-slate-950 text-white placeholder-slate-600 rounded-xl pl-4 pr-12 py-3 border border-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm transition-all"
-            />
+          <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Inquire with an administrator..."
+                className="w-full bg-slate-950 text-white placeholder-slate-600 rounded-xl pl-4 pr-10 py-3 border border-slate-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm transition-all"
+              />
+              <button 
+                type="button"
+                onClick={handleFileClick}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-blue-400 transition-colors"
+                title="Attach Document"
+              >
+                <Paperclip size={18} />
+              </button>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                onChange={handleFileChange}
+              />
+            </div>
             <button 
               type="submit"
               disabled={!inputValue.trim() || isWaitingForAgent || isTyping}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-30 transition-colors"
+              className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-30 transition-colors shrink-0 shadow-lg shadow-blue-600/20"
             >
               <Send size={18} />
             </button>
@@ -244,7 +330,7 @@ export const LiveChatWidget: React.FC = () => {
           <div className="text-center mt-3">
             <div className="inline-flex items-center space-x-1 text-[10px] text-slate-500">
                <ShieldCheck size={10} className="text-blue-500" />
-               <span>End-to-End Encrypted Support Channel</span>
+               <span>Secure Compliance-Ready Channel</span>
             </div>
           </div>
         </div>
