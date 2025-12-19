@@ -12,17 +12,27 @@ export const AdminSupport: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const syncData = () => {
-    setTickets(supportService.getTickets());
+    const updatedTickets = supportService.getTickets();
+    setTickets(updatedTickets);
   };
 
   useEffect(() => {
     syncData();
     window.addEventListener('support_sync_update', syncData);
-    return () => window.removeEventListener('support_sync_update', syncData);
+    
+    // Fallback polling for cross-window situations that broadcast channel might miss
+    const interval = setInterval(syncData, 2000);
+    
+    return () => {
+        window.removeEventListener('support_sync_update', syncData);
+        clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (selectedUserId) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [selectedUserId, tickets]);
 
   const selectedTicket = selectedUserId ? tickets.find(t => t.userId === selectedUserId) : null;
@@ -35,6 +45,9 @@ export const AdminSupport: React.FC = () => {
     supportService.toggleAi(selectedUserId, false);
     supportService.sendMessage(selectedUserId, 'Admin', replyText, false);
     setReplyText('');
+    
+    // Force sync
+    syncData();
   };
 
   return (
@@ -70,6 +83,7 @@ export const AdminSupport: React.FC = () => {
                 onClick={() => {
                   setSelectedUserId(ticket.userId);
                   supportService.markAsRead(ticket.userId);
+                  syncData();
                 }}
                 className={`w-full p-4 flex items-start space-x-3 transition-all border-b border-slate-800/50 text-left ${
                   selectedUserId === ticket.userId ? 'bg-blue-600/10 border-r-4 border-blue-500' : 'hover:bg-slate-800/50'
@@ -119,13 +133,19 @@ export const AdminSupport: React.FC = () => {
               <div className="flex items-center space-x-3">
                 <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-inner">
                    <button 
-                     onClick={() => supportService.toggleAi(selectedTicket.userId, true)}
+                     onClick={() => {
+                        supportService.toggleAi(selectedTicket.userId, true);
+                        syncData();
+                     }}
                      className={`px-3 py-1.5 text-[10px] rounded-lg transition-all font-bold flex items-center ${selectedTicket.isAiEnabled ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
                    >
                      <Bot size={14} className="mr-2" /> AI ASSIST
                    </button>
                    <button 
-                     onClick={() => supportService.toggleAi(selectedTicket.userId, false)}
+                     onClick={() => {
+                        supportService.toggleAi(selectedTicket.userId, false);
+                        syncData();
+                     }}
                      className={`px-3 py-1.5 text-[10px] rounded-lg transition-all font-bold flex items-center ${!selectedTicket.isAiEnabled ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
                    >
                      <HumanIcon size={14} className="mr-2" /> HUMAN ONLY
@@ -158,7 +178,7 @@ export const AdminSupport: React.FC = () => {
                       </div>
                     )}
 
-                    <p className="text-sm leading-relaxed font-medium">{msg.text}</p>
+                    <p className="text-sm leading-relaxed font-medium whitespace-pre-wrap">{msg.text}</p>
                     <div className="text-[10px] mt-3 opacity-40 text-right font-mono italic">
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </div>

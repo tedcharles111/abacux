@@ -39,13 +39,19 @@ const getStoredTickets = (): Record<string, SupportTicket> => {
     return data ? JSON.parse(data) : {};
   } catch (e) {
     console.error("Failed to parse tickets", e);
+    // Return empty object on error to prevent crashes
     return {};
   }
 };
 
 const saveTickets = (tickets: Record<string, SupportTicket>, sourceId: string) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
-  broadcastChannel.postMessage({ type: 'LIVE_SIGNAL', userId: sourceId });
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
+    // Signal other tabs
+    broadcastChannel.postMessage({ type: 'LIVE_SIGNAL', userId: sourceId });
+  } catch (e) {
+    console.error("Failed to save tickets", e);
+  }
 };
 
 export const supportService = {
@@ -57,7 +63,8 @@ export const supportService = {
   },
 
   getTicket: (userId: string): SupportTicket | null => {
-    return getStoredTickets()[userId] || null;
+    const tickets = getStoredTickets();
+    return tickets[userId] || null;
   },
 
   sendMessage: (userId: string, userName: string, text: string, isFromUser: boolean, options?: { attachment?: any, isAi?: boolean }) => {
@@ -97,7 +104,7 @@ export const supportService = {
 
     saveTickets(tickets, userId);
     
-    // Immediate local update
+    // Immediate local update for the current window
     window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId } }));
     
     return newMessage;
@@ -133,6 +140,7 @@ export const supportService = {
 
 broadcastChannel.onmessage = (event) => {
   if (event.data.type === 'LIVE_SIGNAL') {
+    // Dispatch a local event so React components can update
     window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId: event.data.userId } }));
   }
 };
