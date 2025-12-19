@@ -31,7 +31,6 @@ export interface SupportTicket {
 const STORAGE_KEY = 'abacusx_support_v2';
 const CHANNEL_NAME = 'abacusx_live_sync_v2';
 
-// The Live Sync Gateway
 const broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
 
 const getStoredTickets = (): Record<string, SupportTicket> => {
@@ -46,7 +45,6 @@ const getStoredTickets = (): Record<string, SupportTicket> => {
 
 const saveTickets = (tickets: Record<string, SupportTicket>, sourceId: string) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
-  // Broadcast the update signal to all other open tabs immediately
   broadcastChannel.postMessage({ type: 'LIVE_SIGNAL', userId: sourceId });
 };
 
@@ -99,7 +97,7 @@ export const supportService = {
 
     saveTickets(tickets, userId);
     
-    // Trigger local update for the current tab
+    // Immediate local update
     window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId } }));
     
     return newMessage;
@@ -133,7 +131,6 @@ export const supportService = {
   }
 };
 
-// Listen for broadcasted signals from other tabs/windows
 broadcastChannel.onmessage = (event) => {
   if (event.data.type === 'LIVE_SIGNAL') {
     window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId: event.data.userId } }));
