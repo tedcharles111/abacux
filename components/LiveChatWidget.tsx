@@ -157,8 +157,9 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
             scriptProcessor.connect(audioContextRef.current!.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Handle Audio Output
-            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            // Handle Audio Output - Added optional chaining (?.) for parts array
+            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            
             if (base64Audio && outAudioContextRef.current) {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outAudioContextRef.current.currentTime);
               
