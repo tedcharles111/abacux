@@ -124,24 +124,20 @@ export const LiveChatWidget: React.FC = () => {
       if (!chatSessionRef.current) return;
       
       const result = await chatSessionRef.current.sendMessage({ message });
-      const responseText = result.text || "I apologize, I'm having a slight connection issue. How can I assist you further?";
+      const responseText = result.text;
 
-      const newAgentMsg: Message = {
-        id: Date.now().toString(),
-        text: responseText,
-        sender: 'agent',
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, newAgentMsg]);
+      if (responseText) {
+        const newAgentMsg: Message = {
+          id: Date.now().toString(),
+          text: responseText,
+          sender: 'agent',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, newAgentMsg]);
+      }
     } catch (error) {
       console.error("Gemini Chat Error:", error);
-      setMessages(prev => [...prev, {
-        id: 'err',
-        text: "I encountered an error processing your request. Please try again or email support@abacusx.com.",
-        sender: 'agent',
-        timestamp: new Date()
-      }]);
+      // Removed the technical error message as the system auto-response flow is sufficient
     } finally {
       setIsTyping(false);
     }
