@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { User } from '../types';
+import { User, UserRole } from '../types';
 import { Card, Badge, Button } from '../components/ui';
 import { ArrowUpRight, ArrowDownLeft, Clock, Info } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -41,13 +42,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
           <h1 className="text-2xl font-bold text-white">Welcome back, {user.fullName}</h1>
           <p className="text-slate-400">Here's what's happening with your portfolio today.</p>
         </div>
-        <div className="flex space-x-3">
-          <Button variant="outline" size="sm" onClick={() => onNavigate('wallet')}>Deposit</Button>
-          <Button size="sm" onClick={() => onNavigate('invest')}>New Investment</Button>
-        </div>
+        {user.role !== UserRole.ADMIN && (
+          <div className="flex space-x-3">
+            <Button variant="outline" size="sm" onClick={() => onNavigate('wallet')}>Deposit</Button>
+            <Button size="sm" onClick={() => onNavigate('invest')}>New Investment</Button>
+          </div>
+        )}
       </div>
 
-      {user.kycStatus !== 'VERIFIED' && (
+      {user.kycStatus !== 'VERIFIED' && user.role !== UserRole.ADMIN && (
         <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4 flex items-start space-x-3">
           <Info className="text-blue-400 flex-shrink-0 mt-0.5" size={20} />
           <div>
@@ -146,7 +149,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                <p className="text-xs text-slate-500">APR</p>
              </div>
           </div>
-          <Button variant="ghost" size="sm" className="w-full mt-4" onClick={() => onNavigate('invest')}>View All Plans</Button>
+          {user.role !== UserRole.ADMIN && (
+            <Button variant="ghost" size="sm" className="w-full mt-4" onClick={() => onNavigate('invest')}>View All Plans</Button>
+          )}
         </Card>
       </div>
 
