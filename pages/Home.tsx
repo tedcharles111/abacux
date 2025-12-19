@@ -241,11 +241,12 @@ export const Home: React.FC<{ onNavigate: (page: string) => void }> = ({ onNavig
                 Choose from our selection of AI-optimized portfolios designed for every risk appetite.
               </p>
             </div>
+            {/* Arrows */}
             <div className="flex space-x-4">
-               <button onClick={prevPlan} className="p-3 rounded-full border border-slate-700 hover:bg-slate-800 text-white transition-colors">
+               <button onClick={prevPlan} className="p-3 rounded-full border border-slate-700 hover:bg-slate-800 text-white transition-colors" aria-label="Previous Plan">
                  <ChevronLeft size={24} />
                </button>
-               <button onClick={nextPlan} className="p-3 rounded-full border border-slate-700 hover:bg-slate-800 text-white transition-colors">
+               <button onClick={nextPlan} className="p-3 rounded-full border border-slate-700 hover:bg-slate-800 text-white transition-colors" aria-label="Next Plan">
                  <ChevronRight size={24} />
                </button>
             </div>
@@ -256,7 +257,7 @@ export const Home: React.FC<{ onNavigate: (page: string) => void }> = ({ onNavig
                  const index = (activePlanIndex + offset) % INVESTMENT_PLANS.length;
                  const plan = INVESTMENT_PLANS[index];
                  return (
-                    <div key={plan.id} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden group hover:border-blue-500/50 transition-all hover:shadow-2xl hover:shadow-blue-500/10 h-full flex flex-col">
+                    <div key={plan.id} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden group hover:border-blue-500/50 transition-all hover:shadow-2xl hover:shadow-blue-500/10 h-full flex flex-col transform duration-500">
                       <div className="h-48 overflow-hidden relative flex-shrink-0">
                         <img 
                           src={plan.image} 
@@ -286,7 +287,22 @@ export const Home: React.FC<{ onNavigate: (page: string) => void }> = ({ onNavig
                     </div>
                  );
                })}
-            </div>
+          </div>
+
+          {/* Dots Indicator */}
+          <div className="flex justify-center mt-8 space-x-2">
+            {INVESTMENT_PLANS.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => setActivePlanIndex(index)}
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  index === activePlanIndex ? 'w-8 bg-blue-600' : 'w-2 bg-slate-700 hover:bg-slate-600'
+                }`}
+                aria-label={`Go to plan ${index + 1}`}
+              />
+            ))}
+          </div>
+
         </div>
       </section>
 
