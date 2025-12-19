@@ -46,7 +46,7 @@ export default function App() {
   const navigate = (p: string) => {
     setPage(p);
     if (!p.startsWith('admin_user_detail')) {
-      setAdminSelectedUserId(null);
+      // Don't reset if we are navigating explicitly
     }
     window.location.hash = p;
   };
@@ -109,9 +109,15 @@ export default function App() {
           );
         case 'admin_user_detail':
           return adminSelectedUserId ? (
-            <AdminUserDetail userId={adminSelectedUserId} onBack={() => navigate('admin_users')} />
+            <AdminUserDetail userId={adminSelectedUserId} onBack={() => navigate('admin_users')} onNavigate={navigate} />
           ) : (
-            <div>Error: No user selected</div>
+            <AdminUsers 
+              onNavigate={navigate} 
+              onSelectUser={(userId) => {
+                setAdminSelectedUserId(userId);
+                navigate('admin_user_detail');
+              }} 
+            />
           );
         case 'admin_support':
           return <AdminSupport />;
