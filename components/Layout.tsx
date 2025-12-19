@@ -53,14 +53,20 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, curren
           </div>
 
           <div className="flex-1 overflow-y-auto py-6 px-3 space-y-1">
-            <NavItem page="dashboard" icon={LayoutDashboard} label="Dashboard" />
-            <NavItem page="wallet" icon={Wallet} label="Wallet" />
-            <NavItem page="invest" icon={TrendingUp} label="Investments" />
-            <NavItem page="kyc" icon={ShieldCheck} label="Identity (KYC)" />
+            {/* User Navigation - Hidden for Admins */}
+            {user?.role !== UserRole.ADMIN && (
+              <>
+                <NavItem page="dashboard" icon={LayoutDashboard} label="Dashboard" />
+                <NavItem page="wallet" icon={Wallet} label="Wallet" />
+                <NavItem page="invest" icon={TrendingUp} label="Investments" />
+                <NavItem page="kyc" icon={ShieldCheck} label="Identity (KYC)" />
+              </>
+            )}
             
+            {/* Admin Navigation */}
             {user?.role === UserRole.ADMIN && (
               <>
-                <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">Admin</div>
+                <div className="px-4 pb-2 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800/50">Admin Console</div>
                 <NavItem page="admin_dashboard" icon={Activity} label="Overview" />
                 <NavItem page="admin_users" icon={Users} label="User Management" />
                 <NavItem page="admin_support" icon={MessageSquare} label="Support Mgmt" />

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
-import { User } from './types';
+import { User, UserRole } from './types';
 import { LiveChatWidget } from './components/LiveChatWidget';
 
 // Pages - Authenticated
@@ -53,7 +53,11 @@ export default function App() {
 
   const handleLogin = (u: User) => {
     setUser(u);
-    navigate('dashboard');
+    if (u.role === UserRole.ADMIN) {
+      navigate('admin_dashboard');
+    } else {
+      navigate('dashboard');
+    }
   };
 
   const handleLogout = () => {
