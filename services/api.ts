@@ -1,7 +1,9 @@
+
 import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount } from '../types';
 
-// Mock Data
-const MOCK_USERS: User[] = [
+const USERS_STORAGE_KEY = 'abacusx_users_db';
+
+const INITIAL_USERS: User[] = [
   {
     id: 'u1',
     email: 'user@abacusx.com',
@@ -54,6 +56,19 @@ const MOCK_USERS: User[] = [
   }
 ];
 
+const getStoredUsers = (): User[] => {
+  const stored = localStorage.getItem(USERS_STORAGE_KEY);
+  if (!stored) {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
+    return INITIAL_USERS;
+  }
+  return JSON.parse(stored);
+};
+
+const saveUsers = (users: User[]) => {
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+};
+
 const MOCK_PLANS: InvestmentPlan[] = [
   { id: 'p1', name: 'Stable Saver', apr: 5.5, durationDays: 30, minDeposit: 100, riskLevel: 'LOW', description: 'Low risk stablecoin yield farming.' },
   { id: 'p2', name: 'Growth Alpha', apr: 12.0, durationDays: 90, minDeposit: 500, riskLevel: 'MEDIUM', description: 'Balanced crypto basket rebalancing.' },
@@ -75,20 +90,24 @@ export const api = {
   login: async (email: string, password: string): Promise<User> => {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 800));
-    const user = MOCK_USERS.find(u => u.email === email);
+    const users = getStoredUsers();
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (!user) throw new Error('Invalid credentials');
     return user;
   },
 
   register: async (fullName: string, email: string, password: string): Promise<User> => {
     await new Promise(resolve => setTimeout(resolve, 1000));
+    const users = getStoredUsers();
+    
     // Check if exists
-    if (MOCK_USERS.find(u => u.email === email)) {
+    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
       throw new Error('User already exists');
     }
+
     const newUser: User = {
-      id: `u${MOCK_USERS.length + 1}`,
-      email,
+      id: `u${Date.now()}`,
+      email: email.toLowerCase(),
       fullName,
       role: UserRole.USER,
       kycStatus: KYCStatus.UNVERIFIED,
@@ -96,26 +115,32 @@ export const api = {
       twoFactorEnabled: false,
       joinedAt: new Date().toISOString()
     };
-    MOCK_USERS.push(newUser);
+    
+    users.push(newUser);
+    saveUsers(users);
     return newUser;
   },
 
   getUsers: async (): Promise<User[]> => {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 500));
-    return MOCK_USERS;
+    return getStoredUsers();
   },
 
   getUser: async (id: string): Promise<User | undefined> => {
-    return MOCK_USERS.find(u => u.id === id);
+    const users = getStoredUsers();
+    return users.find(u => u.id === id);
   },
 
   updateUserDisplayAmount: async (userId: string, data: AdminDisplayAmount) => {
-    const user = MOCK_USERS.find(u => u.id === userId);
-    if (user) {
-      user.adminDisplayAdjustment = data;
+    const users = getStoredUsers();
+    const index = users.findIndex(u => u.id === userId);
+    if (index !== -1) {
+      users[index].adminDisplayAdjustment = data;
+      saveUsers(users);
+      return users[index];
     }
-    return user;
+    return undefined;
   },
 
   getPlans: async () => MOCK_PLANS,
@@ -123,8 +148,13 @@ export const api = {
   getActiveInvestments: async (userId: string) => MOCK_ACTIVE_INVESTMENTS,
   
   submitKYC: async (userId: string, formData: any) => {
-    const user = MOCK_USERS.find(u => u.id === userId);
-    if (user) user.kycStatus = KYCStatus.PENDING;
-    return true;
+    const users = getStoredUsers();
+    const index = users.findIndex(u => u.id === userId);
+    if (index !== -1) {
+      users[index].kycStatus = KYCStatus.PENDING;
+      saveUsers(users);
+      return true;
+    }
+    return false;
   }
 };
