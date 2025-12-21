@@ -1,6 +1,4 @@
 
-import { User } from '../types';
-
 export interface ChatMessage {
   id: string;
   senderId: string;
@@ -8,7 +6,6 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isFromUser: boolean;
-  isSystem?: boolean;
 }
 
 export interface SupportTicket {
@@ -21,11 +18,13 @@ export interface SupportTicket {
   unreadCount: number;
 }
 
-const STORAGE_KEY = 'abacusx_support_v4_stable';
-const SYNC_EVENT = 'abacusx_support_sync_trigger';
+const STORAGE_KEY = 'abacusx_support_ledger_v5';
+const SYNC_CHANNEL = 'abacusx_support_sync_v5';
 
-// Helper to get fresh data
-const getDB = (): Record<string, SupportTicket> => {
+// Native browser broadcast for instant multi-tab sync
+const bc = new BroadcastChannel(SYNC_CHANNEL);
+
+const getLedger = (): Record<string, SupportTicket> => {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : {};
@@ -34,36 +33,33 @@ const getDB = (): Record<string, SupportTicket> => {
   }
 };
 
-// Helper to save and alert all components
-const saveDB = (db: Record<string, SupportTicket>) => {
+const saveLedger = (db: Record<string, SupportTicket>) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-  // Alert same tab
-  window.dispatchEvent(new CustomEvent(SYNC_EVENT));
-  // Storage event automatically alerts other tabs
+  // Signal ALL listeners (Current tab and other tabs)
+  bc.postMessage('REFRESH');
+  window.dispatchEvent(new Event('storage_sync'));
 };
 
-// Listen for cross-tab updates
-window.addEventListener('storage', (e) => {
-  if (e.key === STORAGE_KEY) {
-    window.dispatchEvent(new CustomEvent(SYNC_EVENT));
-  }
-});
+// Listen for signals from other tabs
+bc.onmessage = () => {
+  window.dispatchEvent(new Event('storage_sync'));
+};
 
 export const supportService = {
   getTickets: (): SupportTicket[] => {
-    const db = getDB();
+    const db = getLedger();
     return Object.values(db).sort((a, b) => 
       new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime()
     );
   },
 
   getTicket: (userId: string): SupportTicket | null => {
-    const db = getDB();
+    const db = getLedger();
     return db[userId] || null;
   },
 
   sendMessage: (userId: string, userName: string, text: string, isFromUser: boolean) => {
-    const db = getDB();
+    const db = getLedger();
     
     if (!db[userId]) {
       db[userId] = {
@@ -77,51 +73,45 @@ export const supportService = {
       };
     }
 
-    const timestamp = new Date().toISOString();
-
-    // 1. Add the actual message
     const newMessage: ChatMessage = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-      senderId: isFromUser ? userId : 'admin-01',
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      senderId: isFromUser ? userId : 'admin',
       senderName: isFromUser ? userName : 'AbacusX Support',
       text,
-      timestamp,
+      timestamp: new Date().toISOString(),
       isFromUser
     };
-    db[userId].messages.push(newMessage);
 
-    // 2. If it's a user message, add the mandatory AI Unavailable Notice
+    db[userId].messages.push(newMessage);
+    db[userId].lastMessage = text;
+    db[userId].lastTimestamp = newMessage.timestamp;
+    
+    // Increment unread for admin if sent by user
     if (isFromUser) {
-      const noticeMessage: ChatMessage = {
-        id: `sys_${Date.now()}`,
-        senderId: 'system',
-        senderName: 'System',
-        text: 'Live Concierge Service Notice: AI capabilities are currently unavailable (API Key not configured).',
-        timestamp: new Date(Date.now() + 10).toISOString(),
-        isFromUser: false,
-        isSystem: true
-      };
-      db[userId].messages.push(noticeMessage);
       db[userId].unreadCount += 1;
     }
 
-    db[userId].lastMessage = text;
-    db[userId].lastTimestamp = timestamp;
-    
-    saveDB(db);
+    saveLedger(db);
     return newMessage;
   },
 
   markAsRead: (userId: string) => {
-    const db = getDB();
+    const db = getLedger();
     if (db[userId]) {
       db[userId].unreadCount = 0;
-      saveDB(db);
+      saveLedger(db);
     }
   },
 
   subscribe: (callback: () => void) => {
-    window.addEventListener(SYNC_EVENT, callback);
-    return () => window.removeEventListener(SYNC_EVENT, callback);
+    window.addEventListener('storage_sync', callback);
+    // Also listen to raw storage events
+    window.addEventListener('storage', (e) => {
+      if (e.key === STORAGE_KEY) callback();
+    });
+    return () => {
+      window.removeEventListener('storage_sync', callback);
+      window.removeEventListener('storage', callback);
+    };
   }
 };
