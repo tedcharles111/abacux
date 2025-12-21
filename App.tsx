@@ -21,15 +21,23 @@ import { Support } from './pages/Support';
 import { Login } from './pages/Login';
 import { SignUp } from './pages/SignUp';
 
-const PlaceholderPage: React.FC<{title: string}> = ({title}) => (
-  <div className="text-white p-8 border border-dashed border-slate-700 rounded-xl flex flex-col items-center justify-center min-h-[400px]">
-    <h2 className="text-2xl font-bold mb-4">{title}</h2>
-    <p className="text-slate-400 mb-6">This module is part of the full implementation.</p>
-  </div>
-);
+const SESSION_KEY = 'abacusx_auth_session';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  // Initialize user from localStorage if available
+  const [user, setUser] = useState<User | null>(() => {
+    const savedSession = localStorage.getItem(SESSION_KEY);
+    if (savedSession) {
+      try {
+        return JSON.parse(savedSession);
+      } catch (e) {
+        console.error("Failed to parse session", e);
+        return null;
+      }
+    }
+    return null;
+  });
+
   const [page, setPage] = useState('home'); 
   const [adminSelectedUserId, setAdminSelectedUserId] = useState<string | null>(null);
 
@@ -53,6 +61,9 @@ export default function App() {
 
   const handleLogin = (u: User) => {
     setUser(u);
+    // Persist session to localStorage
+    localStorage.setItem(SESSION_KEY, JSON.stringify(u));
+    
     if (u.role === UserRole.ADMIN) {
       navigate('admin_dashboard');
     } else {
@@ -62,6 +73,8 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(null);
+    // Clear session from localStorage
+    localStorage.removeItem(SESSION_KEY);
     navigate('home');
   };
 
