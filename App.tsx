@@ -7,6 +7,7 @@ import { LiveChatWidget } from './components/LiveChatWidget';
 
 // Pages - Authenticated
 import { Dashboard } from './pages/Dashboard';
+import { Wallet } from './pages/Wallet';
 import { AdminUserDetail } from './pages/admin/AdminUserDetail';
 import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminSupport } from './pages/admin/AdminSupport';
@@ -79,7 +80,7 @@ export default function App() {
     const renderPrivateContent = () => {
       switch (page) {
         case 'dashboard': return <Dashboard user={user} onNavigate={navigate} />;
-        case 'wallet': return <PlaceholderPage title="Wallet & Deposits" />;
+        case 'wallet': return <Wallet user={user} />;
         case 'invest': return <PlaceholderPage title="Investment Plans" />;
         case 'kyc': return <PlaceholderPage title="Identity Verification" />;
         case 'admin_dashboard':
@@ -137,7 +138,6 @@ export default function App() {
   return (
     <>
       {renderContent()}
-      {/* Hide the support widget for admins - they should use the Support Management page */}
       {user?.role !== UserRole.ADMIN && <LiveChatWidget user={user} />}
     </>
   );
