@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 // Button
@@ -59,14 +60,22 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; tit
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  icon?: React.ReactNode;
 }
-export const Input: React.FC<InputProps> = ({ label, error, className = '', ...props }) => (
+export const Input: React.FC<InputProps> = ({ label, error, icon, className = '', ...props }) => (
   <div className="w-full">
     {label && <label className="block text-sm font-medium text-slate-300 mb-1">{label}</label>}
-    <input 
-      className={`w-full bg-slate-900 border ${error ? 'border-red-500' : 'border-slate-700'} rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors ${className}`}
-      {...props} 
-    />
+    <div className="relative">
+      {icon && (
+        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+          {icon}
+        </div>
+      )}
+      <input 
+        className={`w-full bg-slate-900 border ${error ? 'border-red-500' : 'border-slate-700'} rounded-lg ${icon ? 'pl-10' : 'px-4'} py-2 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-colors ${className}`}
+        {...props} 
+      />
+    </div>
     {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
   </div>
 );
@@ -78,8 +87,10 @@ export const Badge: React.FC<{ status: string; className?: string }> = ({ status
   
   if (s === 'VERIFIED' || s === 'COMPLETED' || s === 'ACTIVE') colorClass = "bg-green-900/50 text-green-400 border border-green-800";
   if (s === 'PENDING') colorClass = "bg-yellow-900/50 text-yellow-400 border border-yellow-800";
-  if (s === 'REJECTED' || s === 'FAILED') colorClass = "bg-red-900/50 text-red-400 border border-red-800";
+  if (s === 'REJECTED' || s === 'FAILED' || s === 'HIGH') colorClass = "bg-red-900/50 text-red-400 border border-red-800";
   if (s === 'ADMIN') colorClass = "bg-purple-900/50 text-purple-400 border border-purple-800";
+  if (s === 'MEDIUM') colorClass = "bg-yellow-900/50 text-yellow-400 border border-yellow-800";
+  if (s === 'LOW') colorClass = "bg-green-900/50 text-green-400 border border-green-800";
 
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass} ${className}`}>
