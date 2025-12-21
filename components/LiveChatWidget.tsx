@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Minus, ShieldCheck, Headset, Mic, MicOff, Wifi, Volume2, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Send, Minus, ShieldCheck, Headset, Mic, MicOff, Wifi, Sparkles, AlertCircle } from 'lucide-react';
 import { supportService, ChatMessage } from '../services/support';
 import { User } from '../types';
 import { GoogleGenAI, LiveServerMessage, Modality, Blob, GenerateContentResponse } from '@google/genai';
@@ -102,8 +102,12 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
     setIsConnecting(true);
 
     try {
-      // Assuming API_KEY is valid per instructions.
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        throw new Error("API Key not configured");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       
       // 1. Initialize Audio Contexts (Must happen after user gesture)
       if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
@@ -155,7 +159,6 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
           },
           onmessage: async (message: LiveServerMessage) => {
             // Handle Audio Output
-            // Safely destructure to prevent TS18048 errors
             const serverContent = message.serverContent;
             const modelTurn = serverContent?.modelTurn;
             const parts = modelTurn?.parts;
@@ -176,11 +179,6 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
               source.start(nextStartTimeRef.current);
               nextStartTimeRef.current += buffer.duration;
               sourcesRef.current.add(source);
-            }
-
-            // Handle Transcriptions (Optional fallback for visual)
-            if (message.serverContent?.outputTranscription?.text) {
-               // We could log this or show subtitles
             }
 
             // Handle Interruptions
@@ -215,7 +213,7 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
       console.error("Failed to start Live API", err);
       setIsConnecting(false);
       setIsVoiceActive(false);
-      setErrorMessage(err.message || "Failed to access microphone or connect.");
+      setErrorMessage(err.message === "API Key not configured" ? "Voice Service Unavailable" : "Failed to access microphone or connect.");
     }
   };
 
@@ -250,8 +248,14 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
     setErrorMessage(null);
 
     try {
-      // Assuming API_KEY is valid per instructions.
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        // Mock delay for realism when no key is present
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        throw new Error("API_KEY_MISSING");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       const responseStream = await ai.models.generateContentStream({
         model: 'gemini-3-flash-preview',
         contents: text, 
@@ -273,7 +277,13 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
       
     } catch (err: any) {
       console.error("Chat Error", err);
-      supportService.sendMessage(userId, 'System', 'I am currently experiencing high traffic. Please try again later.', false, { isAi: true });
+      let replyMessage = 'I am currently experiencing high traffic. Please try again later.';
+      
+      if (err.message === "API_KEY_MISSING") {
+         replyMessage = "Service Notice: AI capabilities are currently unavailable (API Key not configured).";
+      }
+      
+      supportService.sendMessage(userId, 'System', replyMessage, false, { isAi: true });
     } finally {
       setIsAiThinking(false);
     }
@@ -313,4 +323,115 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
         </div>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950 scrollbar-hide">
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex ${msg.isFromUser ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
+                msg.isFromUser 
+                  ? 'bg-blue-600 text-white rounded-br-none' 
+                  : 'bg-slate-800 text-slate-200 rounded-bl-none border border-slate-700'
+              }`}>
+                {msg.isAi && <span className="text-[8px] uppercase font-black text-blue-400 block mb-1">Live Concierge</span>}
+                <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+              </div>
+            </div>
+          ))}
+
+          {/* Streaming Text */}
+          {streamingText && (
+            <div className="flex justify-start">
+               <div className="max-w-[85%] rounded-2xl px-4 py-3 text-sm bg-slate-800 text-slate-200 rounded-bl-none border border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+                  <span className="text-[8px] uppercase font-black text-blue-400 flex items-center mb-1">
+                    <Sparkles size={10} className="mr-1 animate-pulse" /> Live Streaming
+                  </span>
+                  <p className="whitespace-pre-wrap leading-relaxed">{streamingText}</p>
+               </div>
+            </div>
+          )}
+
+          {/* Thinking Indicator */}
+          {isAiThinking && !streamingText && (
+            <div className="flex justify-start">
+               <div className="bg-slate-800 border border-slate-700 rounded-2xl p-3 flex space-x-1">
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+               </div>
+            </div>
+          )}
+          
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="flex justify-center">
+              <div className="bg-red-900/20 border border-red-500/50 text-red-200 text-xs px-3 py-2 rounded-lg flex items-center">
+                <AlertCircle size={14} className="mr-2" />
+                {errorMessage}
+              </div>
+            </div>
+          )}
+
+          {/* Voice Active Animation */}
+          {isVoiceActive && (
+            <div className="flex flex-col items-center justify-center py-6 space-y-3 bg-slate-900/50 rounded-xl border border-blue-500/20">
+               <div className="flex items-center space-x-1 h-8">
+                  {[...Array(8)].map((_, i) => (
+                    <div 
+                      key={i} 
+                      className="w-1 bg-blue-500 rounded-full animate-pulse" 
+                      style={{ 
+                        height: `${Math.random() * 100}%`, 
+                        minHeight: '4px',
+                        animationDuration: `${0.3 + Math.random() * 0.5}s` 
+                      }}
+                    ></div>
+                  ))}
+               </div>
+               <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest animate-pulse">Listening...</span>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <div className="p-4 bg-slate-800 border-t border-slate-700">
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={isVoiceActive ? stopVoice : startVoice}
+              disabled={isConnecting}
+              title={isVoiceActive ? "End Voice Session" : "Start Voice Concierge"}
+              className={`p-3 rounded-xl transition-all shadow-lg flex items-center justify-center active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${isVoiceActive ? 'bg-red-600 hover:bg-red-700 text-white ring-4 ring-red-500/20' : 'bg-slate-900 hover:bg-slate-700 text-blue-400 border border-slate-700'}`}
+            >
+              {isVoiceActive ? <MicOff size={20} /> : <Mic size={20} />}
+            </button>
+            <form onSubmit={handleSendMessage} className="flex-1 flex space-x-2">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                disabled={isVoiceActive || isAiThinking}
+                placeholder={isVoiceActive ? "Listening (Voice Mode)..." : "Ask AbacusX..."}
+                className="flex-1 bg-slate-950 text-white rounded-xl px-4 py-3 border border-slate-700 focus:border-blue-500 text-sm outline-none disabled:opacity-50 transition-all placeholder:text-slate-600"
+              />
+              <button 
+                type="submit" 
+                disabled={!inputValue.trim() || isAiThinking || isVoiceActive}
+                className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 shadow-lg active:scale-95 disabled:opacity-50 transition-all"
+              >
+                <Send size={18} />
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating Toggle Button */}
+      <button onClick={() => setIsOpen(!isOpen)} className={`pointer-events-auto h-16 w-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 relative hover:scale-110 active:scale-90 z-[100] ${isOpen ? 'bg-slate-800' : 'bg-blue-600 shadow-blue-500/40'}`}>
+        {isOpen ? <X size={28} className="text-white" /> : <Headset size={28} className="text-white" />}
+        {!isOpen && messages.length > 0 && messages[messages.length-1].isAi && (
+          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full border-2 border-slate-950 text-[10px] font-bold text-white flex items-center justify-center">1</div>
+        )}
+      </button>
+    </div>
+  );
+};
+    
