@@ -31,6 +31,7 @@ export interface SupportTicket {
 const STORAGE_KEY = 'abacusx_support_v2';
 const CHANNEL_NAME = 'abacusx_live_sync_v2';
 
+// BroadcastChannel for modern browsers (same-origin tabs)
 const broadcastChannel = new BroadcastChannel(CHANNEL_NAME);
 
 const getStoredTickets = (): Record<string, SupportTicket> => {
@@ -39,7 +40,6 @@ const getStoredTickets = (): Record<string, SupportTicket> => {
     return data ? JSON.parse(data) : {};
   } catch (e) {
     console.error("Failed to parse tickets", e);
-    // Return empty object on error to prevent crashes
     return {};
   }
 };
@@ -47,10 +47,25 @@ const getStoredTickets = (): Record<string, SupportTicket> => {
 const saveTickets = (tickets: Record<string, SupportTicket>, sourceId: string) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
-    // Signal other tabs
+    // Signal other tabs via BroadcastChannel
     broadcastChannel.postMessage({ type: 'LIVE_SIGNAL', userId: sourceId });
+    // Signal current window
+    window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId: sourceId } }));
   } catch (e) {
     console.error("Failed to save tickets", e);
+  }
+};
+
+// Global listener for cross-tab storage changes (Backup for BroadcastChannel)
+window.addEventListener('storage', (event) => {
+  if (event.key === STORAGE_KEY) {
+    window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId: 'external_update' } }));
+  }
+});
+
+broadcastChannel.onmessage = (event) => {
+  if (event.data.type === 'LIVE_SIGNAL') {
+    window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId: event.data.userId } }));
   }
 };
 
@@ -85,13 +100,13 @@ export const supportService = {
 
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      senderId: isFromUser ? userId : (options?.isAi ? 'ai-concierge' : 'human-admin'),
-      senderName: isFromUser ? userName : (options?.isAi ? 'David (AI)' : 'Senior Support'),
+      senderId: isFromUser ? userId : 'human-admin',
+      senderName: isFromUser ? userName : 'Senior Support',
       text,
       attachment: options?.attachment,
       timestamp: new Date().toISOString(),
       isFromUser,
-      isAi: options?.isAi
+      isAi: false // AI features strictly removed as per previous request
     };
 
     tickets[userId].messages.push(newMessage);
@@ -103,20 +118,7 @@ export const supportService = {
     }
 
     saveTickets(tickets, userId);
-    
-    // Immediate local update for the current window
-    window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId } }));
-    
     return newMessage;
-  },
-
-  toggleAi: (userId: string, enabled: boolean) => {
-    const tickets = getStoredTickets();
-    if (tickets[userId]) {
-      tickets[userId].isAiEnabled = enabled;
-      saveTickets(tickets, userId);
-      window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId } }));
-    }
   },
 
   markAsRead: (userId: string) => {
@@ -124,7 +126,6 @@ export const supportService = {
     if (tickets[userId]) {
       tickets[userId].unreadCount = 0;
       saveTickets(tickets, userId);
-      window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId } }));
     }
   },
 
@@ -133,14 +134,6 @@ export const supportService = {
     if (tickets[userId]) {
       tickets[userId].status = 'CLOSED';
       saveTickets(tickets, userId);
-      window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId } }));
     }
-  }
-};
-
-broadcastChannel.onmessage = (event) => {
-  if (event.data.type === 'LIVE_SIGNAL') {
-    // Dispatch a local event so React components can update
-    window.dispatchEvent(new CustomEvent('support_sync_update', { detail: { userId: event.data.userId } }));
   }
 };

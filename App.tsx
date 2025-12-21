@@ -45,9 +45,6 @@ export default function App() {
 
   const navigate = (p: string) => {
     setPage(p);
-    if (!p.startsWith('admin_user_detail')) {
-      // Don't reset if we are navigating explicitly
-    }
     window.location.hash = p;
   };
 
@@ -140,7 +137,8 @@ export default function App() {
   return (
     <>
       {renderContent()}
-      <LiveChatWidget user={user} />
+      {/* Hide the support widget for admins - they should use the Support Management page */}
+      {user?.role !== UserRole.ADMIN && <LiveChatWidget user={user} />}
     </>
   );
 }

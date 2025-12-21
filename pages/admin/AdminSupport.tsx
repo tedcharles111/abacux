@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supportService, SupportTicket } from '../../services/support';
 import { Button } from '../../components/ui';
-import { Send, Search, User as UserIcon, Paperclip, Bot, User as HumanIcon, MessageSquare, Wifi, ShieldCheck } from 'lucide-react';
+import { Send, Search, User as UserIcon, MessageSquare, Wifi, ShieldCheck, RefreshCw } from 'lucide-react';
 
 export const AdminSupport: React.FC = () => {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -18,10 +18,11 @@ export const AdminSupport: React.FC = () => {
 
   useEffect(() => {
     syncData();
+    // Listen for both custom sync events and cross-tab storage changes
     window.addEventListener('support_sync_update', syncData);
     
-    // Fallback polling for cross-window situations that broadcast channel might miss
-    const interval = setInterval(syncData, 2000);
+    // Fallback polling for maximum reliability in production scenarios
+    const interval = setInterval(syncData, 3000);
     
     return () => {
         window.removeEventListener('support_sync_update', syncData);
@@ -41,12 +42,8 @@ export const AdminSupport: React.FC = () => {
     e.preventDefault();
     if (!selectedUserId || !replyText.trim()) return;
 
-    // Human admin intervention automatically takes over from AI
-    supportService.toggleAi(selectedUserId, false);
     supportService.sendMessage(selectedUserId, 'Admin', replyText, false);
     setReplyText('');
-    
-    // Force sync
     syncData();
   };
 
@@ -59,23 +56,29 @@ export const AdminSupport: React.FC = () => {
             <h2 className="text-xl font-bold text-white flex items-center">
               <MessageSquare size={20} className="mr-2 text-blue-500" /> Inbox
             </h2>
-            <div className={`flex items-center space-x-1.5 px-2 py-1 rounded text-[10px] font-bold ${isLive ? 'text-green-400 bg-green-400/10' : 'text-slate-500 bg-slate-500/10'}`}>
-              <Wifi size={12} className={isLive ? 'animate-pulse' : ''} />
-              <span>LIVE</span>
-            </div>
+            <button 
+              onClick={syncData}
+              className={`flex items-center space-x-1.5 px-2 py-1 rounded text-[10px] font-bold transition-colors ${isLive ? 'text-green-400 bg-green-400/10' : 'text-slate-500 bg-slate-500/10'}`}
+            >
+              <RefreshCw size={12} className={isLive ? 'animate-spin-slow' : ''} />
+              <span>SYNCED</span>
+            </button>
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
             <input 
               type="text" 
-              placeholder="Filter conversations..." 
+              placeholder="Search conversations..." 
               className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:border-blue-500 outline-none"
             />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {tickets.length === 0 ? (
-            <div className="p-10 text-center text-slate-500 text-xs italic">No active support conversations.</div>
+            <div className="p-10 text-center text-slate-500 text-xs italic flex flex-col items-center">
+              <Wifi size={24} className="mb-2 opacity-20" />
+              Waiting for incoming user connections...
+            </div>
           ) : (
             tickets.map(ticket => (
               <button
@@ -104,7 +107,7 @@ export const AdminSupport: React.FC = () => {
                   </p>
                 </div>
                 {ticket.unreadCount > 0 && (
-                  <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-[10px] text-white font-bold animate-pulse">
+                  <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center text-[10px] text-white font-bold shadow-[0_0_10px_rgba(37,99,235,0.5)]">
                     {ticket.unreadCount}
                   </div>
                 )}
@@ -126,58 +129,25 @@ export const AdminSupport: React.FC = () => {
                 <div>
                   <h3 className="text-white font-bold">{selectedTicket.userName}</h3>
                   <p className="text-[10px] text-green-400 flex items-center uppercase tracking-widest font-black">
-                    <span className="w-2 h-2 rounded-full bg-green-400 mr-2 shadow-[0_0_8px_#10b981] animate-pulse"></span> Encrypted Session
+                    <span className="w-2 h-2 rounded-full bg-green-400 mr-2 shadow-[0_0_8px_#10b981] animate-pulse"></span> Encrypted Line
                   </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800 shadow-inner">
-                   <button 
-                     onClick={() => {
-                        supportService.toggleAi(selectedTicket.userId, true);
-                        syncData();
-                     }}
-                     className={`px-3 py-1.5 text-[10px] rounded-lg transition-all font-bold flex items-center ${selectedTicket.isAiEnabled ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-                   >
-                     <Bot size={14} className="mr-2" /> AI ASSIST
-                   </button>
-                   <button 
-                     onClick={() => {
-                        supportService.toggleAi(selectedTicket.userId, false);
-                        syncData();
-                     }}
-                     className={`px-3 py-1.5 text-[10px] rounded-lg transition-all font-bold flex items-center ${!selectedTicket.isAiEnabled ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
-                   >
-                     <HumanIcon size={14} className="mr-2" /> HUMAN ONLY
-                   </button>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 space-y-6">
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 scrollbar-hide">
               {selectedTicket.messages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.isFromUser ? 'justify-start' : 'justify-end'}`}>
                   <div className={`max-w-[70%] rounded-2xl p-5 shadow-2xl border transition-all ${
                     msg.isFromUser 
                       ? 'bg-slate-800 text-slate-200 border-slate-700 rounded-bl-none' 
-                      : (msg.isAi ? 'bg-slate-900 text-blue-300 border-blue-900/40 rounded-br-none' : 'bg-blue-600 text-white border-blue-500/50 rounded-br-none')
+                      : 'bg-blue-600 text-white border-blue-500/50 rounded-br-none'
                   }`}>
                     {!msg.isFromUser && (
                       <div className="text-[9px] uppercase font-black opacity-50 mb-2 tracking-[0.1em]">
-                        {msg.isAi ? 'AUTOMATED CONCIERGE' : 'PRIORITY ADMINISTRATOR'}
+                        Priority Administrator
                       </div>
                     )}
-                    
-                    {msg.attachment && (
-                      <div className="mb-4 p-4 bg-black/30 rounded-2xl flex items-center space-x-4 border border-white/5">
-                        <Paperclip size={20} className="text-blue-400" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-white truncate">{msg.attachment.name}</p>
-                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">SECURE DOCUMENT</p>
-                        </div>
-                      </div>
-                    )}
-
                     <p className="text-sm leading-relaxed font-medium whitespace-pre-wrap">{msg.text}</p>
                     <div className="text-[10px] mt-3 opacity-40 text-right font-mono italic">
                       {new Date(msg.timestamp).toLocaleTimeString()}
@@ -194,7 +164,7 @@ export const AdminSupport: React.FC = () => {
                   type="text" 
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Respond to ${selectedTicket.userName}...`}
+                  placeholder={`Reply to ${selectedTicket.userName}...`}
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-2xl px-5 py-4 text-sm text-white focus:border-blue-600 outline-none shadow-inner"
                 />
                 <button 
@@ -214,7 +184,7 @@ export const AdminSupport: React.FC = () => {
              </div>
              <div>
                 <p className="text-xl font-black text-slate-400 uppercase tracking-widest">Gateway Ready</p>
-                <p className="text-sm text-slate-600 mt-2 max-w-xs mx-auto">Select a user ticket from the sidebar to establish a priority live connection.</p>
+                <p className="text-sm text-slate-600 mt-2 max-w-xs mx-auto">Select a customer thread from the left to start a real-time intervention.</p>
              </div>
           </div>
         )}
