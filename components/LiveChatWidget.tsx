@@ -157,8 +157,12 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
             scriptProcessor.connect(audioContextRef.current!.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Handle Audio Output - Added optional chaining (?.) for parts array
-            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            // Handle Audio Output
+            // Safely destructure to prevent TS18048 errors
+            const serverContent = message.serverContent;
+            const modelTurn = serverContent?.modelTurn;
+            const parts = modelTurn?.parts;
+            const base64Audio = parts?.[0]?.inlineData?.data;
             
             if (base64Audio && outAudioContextRef.current) {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outAudioContextRef.current.currentTime);
@@ -429,3 +433,4 @@ export const LiveChatWidget: React.FC<{ user: User | null }> = ({ user }) => {
     </div>
   );
 };
+    
