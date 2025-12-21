@@ -8,6 +8,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isFromUser: boolean;
+  isSystem?: boolean;
 }
 
 export interface SupportTicket {
@@ -20,61 +21,49 @@ export interface SupportTicket {
   unreadCount: number;
 }
 
-const STORAGE_KEY = 'abacusx_support_db_v3';
-const SIGNAL_EVENT = 'abacusx_support_signal';
-const broadcastChannel = new BroadcastChannel('abacusx_support_channel');
+const STORAGE_KEY = 'abacusx_support_v4_stable';
+const SYNC_EVENT = 'abacusx_support_sync_trigger';
 
-// Internal helper to get all tickets from localStorage
-const _load = (): Record<string, SupportTicket> => {
+// Helper to get fresh data
+const getDB = (): Record<string, SupportTicket> => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const data = localStorage.getItem(STORAGE_KEY);
+    return data ? JSON.parse(data) : {};
   } catch (e) {
     return {};
   }
 };
 
-// Internal helper to save and broadcast update
-const _saveAndSync = (tickets: Record<string, SupportTicket>) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
-  
-  // 1. Tell current window (for Same-Tab SPA navigation)
-  window.dispatchEvent(new Event(SIGNAL_EVENT));
-  
-  // 2. Tell other tabs (for Multi-Tab usage)
-  broadcastChannel.postMessage('REFRESH');
+// Helper to save and alert all components
+const saveDB = (db: Record<string, SupportTicket>) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  // Alert same tab
+  window.dispatchEvent(new CustomEvent(SYNC_EVENT));
+  // Storage event automatically alerts other tabs
 };
 
-// Listen for signals from other tabs
-broadcastChannel.onmessage = () => {
-  window.dispatchEvent(new Event(SIGNAL_EVENT));
-};
-
-// Listen for native storage events (backup)
+// Listen for cross-tab updates
 window.addEventListener('storage', (e) => {
   if (e.key === STORAGE_KEY) {
-    window.dispatchEvent(new Event(SIGNAL_EVENT));
+    window.dispatchEvent(new CustomEvent(SYNC_EVENT));
   }
 });
 
 export const supportService = {
-  // Get all tickets sorted by latest activity
   getTickets: (): SupportTicket[] => {
-    const db = _load();
+    const db = getDB();
     return Object.values(db).sort((a, b) => 
       new Date(b.lastTimestamp).getTime() - new Date(a.lastTimestamp).getTime()
     );
   },
 
-  // Get specific ticket for a user
   getTicket: (userId: string): SupportTicket | null => {
-    const db = _load();
+    const db = getDB();
     return db[userId] || null;
   },
 
-  // Core messaging function
   sendMessage: (userId: string, userName: string, text: string, isFromUser: boolean) => {
-    const db = _load();
+    const db = getDB();
     
     if (!db[userId]) {
       db[userId] = {
@@ -88,40 +77,51 @@ export const supportService = {
       };
     }
 
+    const timestamp = new Date().toISOString();
+
+    // 1. Add the actual message
     const newMessage: ChatMessage = {
-      id: `m_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       senderId: isFromUser ? userId : 'admin-01',
       senderName: isFromUser ? userName : 'AbacusX Support',
       text,
-      timestamp: new Date().toISOString(),
+      timestamp,
       isFromUser
     };
-
     db[userId].messages.push(newMessage);
-    db[userId].lastMessage = text;
-    db[userId].lastTimestamp = newMessage.timestamp;
-    
-    // Only increment unread if coming from user and admin is not looking
+
+    // 2. If it's a user message, add the mandatory AI Unavailable Notice
     if (isFromUser) {
+      const noticeMessage: ChatMessage = {
+        id: `sys_${Date.now()}`,
+        senderId: 'system',
+        senderName: 'System',
+        text: 'Live Concierge Service Notice: AI capabilities are currently unavailable (API Key not configured).',
+        timestamp: new Date(Date.now() + 10).toISOString(),
+        isFromUser: false,
+        isSystem: true
+      };
+      db[userId].messages.push(noticeMessage);
       db[userId].unreadCount += 1;
     }
 
-    _saveAndSync(db);
+    db[userId].lastMessage = text;
+    db[userId].lastTimestamp = timestamp;
+    
+    saveDB(db);
     return newMessage;
   },
 
-  // Mark a user's messages as read
   markAsRead: (userId: string) => {
-    const db = _load();
+    const db = getDB();
     if (db[userId]) {
       db[userId].unreadCount = 0;
-      _saveAndSync(db);
+      saveDB(db);
     }
   },
 
-  // Global Refresh Hook (used by components)
   subscribe: (callback: () => void) => {
-    window.addEventListener(SIGNAL_EVENT, callback);
-    return () => window.removeEventListener(SIGNAL_EVENT, callback);
+    window.addEventListener(SYNC_EVENT, callback);
+    return () => window.removeEventListener(SYNC_EVENT, callback);
   }
 };
