@@ -104,7 +104,8 @@ export const api = {
     return undefined;
   },
 
-  getPlans: async () => [
+  // Explicitly typing the return value to ensure riskLevel is correctly typed as literal union
+  getPlans: async (): Promise<InvestmentPlan[]> => [
     { id: 'p1', name: 'Stable Saver', apr: 5.5, durationDays: 30, minDeposit: 100, riskLevel: 'LOW', description: 'Low risk stablecoin yield farming.' },
     { id: 'p2', name: 'Growth Alpha', apr: 12.0, durationDays: 90, minDeposit: 500, riskLevel: 'MEDIUM', description: 'Balanced crypto basket rebalancing.' },
   ],

@@ -8,6 +8,7 @@ import { LiveChatWidget } from './components/LiveChatWidget';
 // Pages - Authenticated
 import { Dashboard } from './pages/Dashboard';
 import { Wallet } from './pages/Wallet';
+import { Investments } from './pages/Investments';
 import { AdminUserDetail } from './pages/admin/AdminUserDetail';
 import { AdminUsers } from './pages/admin/AdminUsers';
 import { AdminSupport } from './pages/admin/AdminSupport';
@@ -81,7 +82,7 @@ export default function App() {
       switch (page) {
         case 'dashboard': return <Dashboard user={user} onNavigate={navigate} />;
         case 'wallet': return <Wallet user={user} />;
-        case 'invest': return <PlaceholderPage title="Investment Plans" />;
+        case 'invest': return <Investments user={user} />;
         case 'kyc': return <PlaceholderPage title="Identity Verification" />;
         case 'admin_dashboard':
            return (

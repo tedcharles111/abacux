@@ -107,7 +107,7 @@ export const Wallet: React.FC<WalletProps> = ({ user }) => {
              <div className="flex items-center p-4 bg-slate-900 rounded-2xl border border-slate-700">
                 <div className="flex-1">
                   <p className="text-xs text-slate-500 font-bold uppercase mb-1">Your Personal BTC Address</p>
-                  <p className="text-white font-mono text-sm break-all">bc1qxy2kg786ghdxm6psdh9c9sy786ghdxm6p...</p>
+                  <p className="text-white font-mono text-sm break-all min-h-[1.25rem]"></p>
                 </div>
                 <button className="p-3 hover:bg-slate-800 rounded-xl text-blue-400 transition-colors">
                   <Copy size={20} />
