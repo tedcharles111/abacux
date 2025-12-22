@@ -52,7 +52,8 @@ export const LiveChatWidget: React.FC = () => {
             scriptProcessor.connect(audioContextRef.current!.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
-            if (msg.toolCall) {
+            // Fix TS18048: Add optional chaining for toolCall.functionCalls
+            if (msg.toolCall?.functionCalls) {
               for (const fc of msg.toolCall.functionCalls) {
                 if (fc.name === 'queryNodeStatus') {
                   const users = await api.getUsers();
