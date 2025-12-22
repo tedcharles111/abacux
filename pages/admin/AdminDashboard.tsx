@@ -1,160 +1,125 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { User } from '../../types';
-import { api, DB_UPDATE_EVENT } from '../../services/api';
+import { api, DB_UPDATE_EVENT, SYSTEM_LOG_EVENT } from '../../services/api';
 import { Card, Button } from '../../components/ui';
-import { Activity, Users, TrendingUp, ShieldCheck, ArrowRight, Database, Wifi } from 'lucide-react';
+import { Activity, Users, TrendingUp, ShieldCheck, ArrowRight, Database, Wifi, Terminal } from 'lucide-react';
 
-interface AdminDashboardProps {
-  onNavigate: (page: string) => void;
+interface SystemLog {
+  message: string;
+  type: 'INFO' | 'SUCCESS' | 'WARNING';
+  timestamp: string;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    totalBalance: 0,
-    recentUsers: [] as User[],
-  });
-  const [prices] = useState(api.getCurrentPrices());
-  const [syncCount, setSyncCount] = useState(0);
+export const AdminDashboard: React.FC<{ onNavigate: (page: string) => void }> = ({ onNavigate }) => {
+  const [stats, setStats] = useState({ totalUsers: 0, totalBalance: 0, recentUsers: [] as User[] });
+  const [logs, setLogs] = useState<SystemLog[]>([]);
+  const [syncPulse, setSyncPulse] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const prices = api.getCurrentPrices();
 
-  const loadStats = useCallback(async () => {
+  const loadData = useCallback(async () => {
     const users = await api.getUsers();
     const totalBal = users.reduce((sum, u) => {
-      const bal = (u.balance.btc * prices.btc) + (u.balance.eth * prices.eth) + u.balance.usdt + u.balance.usd;
-      return sum + bal;
+      return sum + (u.balance.btc * prices.btc) + (u.balance.eth * prices.eth) + u.balance.usdt + u.balance.usd;
     }, 0);
-
     setStats({
       totalUsers: users.length,
       totalBalance: totalBal,
       recentUsers: [...users].sort((a, b) => new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime()).slice(0, 5)
     });
-    setSyncCount(prev => prev + 1);
+    setSyncPulse(true);
+    setTimeout(() => setSyncPulse(false), 500);
   }, [prices]);
 
   useEffect(() => {
-    loadStats();
-    
-    // Safety polling every 5s for stats
-    const interval = setInterval(loadStats, 5000);
-    
-    window.addEventListener(DB_UPDATE_EVENT, loadStats);
+    loadData();
+    const handleDbUpdate = () => loadData();
+    const handleLog = (e: any) => setLogs(prev => [e.detail, ...prev].slice(0, 50));
+
+    window.addEventListener(DB_UPDATE_EVENT, handleDbUpdate);
+    window.addEventListener(SYSTEM_LOG_EVENT, handleLog);
+    const interval = setInterval(loadData, 5000);
+
     return () => {
+      window.removeEventListener(DB_UPDATE_EVENT, handleDbUpdate);
+      window.removeEventListener(SYSTEM_LOG_EVENT, handleLog);
       clearInterval(interval);
-      window.removeEventListener(DB_UPDATE_EVENT, loadStats);
     };
-  }, [loadStats]);
+  }, [loadData]);
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-black text-white uppercase tracking-tight">Platform Overview</h1>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tight">System Terminal</h1>
           <div className="flex items-center space-x-3 mt-1">
-             <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest flex items-center">
-               <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
-               Ledger Synchronized
-             </p>
-             <span className="text-slate-800">•</span>
-             <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest flex items-center">
-               <Wifi size={10} className="mr-1.5 text-blue-500" />
-               Broadcasting: {syncCount} cycles
-             </p>
+            <span className={`w-2 h-2 rounded-full ${syncPulse ? 'bg-blue-400' : 'bg-green-500'} transition-colors duration-300 animate-pulse`}></span>
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Network Health: Optimal</p>
           </div>
         </div>
-        <Button onClick={() => onNavigate('admin_users')} size="sm">
-          Manage All Nodes <ArrowRight size={16} className="ml-2" />
+        <Button onClick={() => onNavigate('admin_users')} size="sm" variant="outline">
+          Active Nodes: {stats.totalUsers} <ArrowRight size={14} className="ml-2" />
         </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="relative overflow-hidden group border-slate-700 bg-slate-800/40">
-          <div className="absolute -right-4 -top-4 text-blue-500/10 group-hover:text-blue-500/20 transition-colors">
-            <Users size={120} />
-          </div>
-          <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-4">Total Network Nodes</p>
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-4">Live Liquidity</p>
+          <h2 className="text-4xl font-black text-white">${stats.totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h2>
+        </Card>
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-4">Verified Clusters</p>
           <h2 className="text-4xl font-black text-white">{stats.totalUsers}</h2>
-          <div className="mt-4 flex items-center text-xs text-green-400 font-bold">
-            <TrendingUp size={14} className="mr-1" /> Network Capacity Growing
-          </div>
         </Card>
-
-        <Card className="relative overflow-hidden group border-slate-700 bg-slate-800/40">
-          <div className="absolute -right-4 -top-4 text-indigo-500/10 group-hover:text-indigo-500/20 transition-colors">
-            <Database size={120} />
-          </div>
-          <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-4">AUM Portfolio</p>
-          <h2 className="text-4xl font-black text-white">
-            ${stats.totalBalance.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </h2>
-          <div className="mt-4 flex items-center text-xs text-indigo-400 font-bold">
-            <Activity size={14} className="mr-1" /> Real-time Valuations
-          </div>
-        </Card>
-
-        <Card className="relative overflow-hidden group border-slate-700 bg-slate-800/40">
-          <div className="absolute -right-4 -top-4 text-purple-500/10 group-hover:text-purple-500/20 transition-colors">
-            <ShieldCheck size={120} />
-          </div>
-          <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-4">Security Protocol</p>
-          <h2 className="text-4xl font-black text-white">v5.1</h2>
-          <div className="mt-4 flex items-center text-xs text-purple-400 font-bold">
-            <ShieldCheck size={14} className="mr-1" /> Multi-Tab Sync Active
-          </div>
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-4">Security Version</p>
+          <h2 className="text-4xl font-black text-white">v6.2-PROD</h2>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
-          <Card title="Recent Node Activity" className="border-slate-700 bg-slate-900/40">
-            <div className="space-y-4">
-              {stats.recentUsers.map(u => (
-                <div key={u.id} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center font-bold text-white border border-slate-600">
-                      {u.fullName.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-white">{u.fullName}</p>
-                      <p className="text-[10px] text-slate-500 font-mono tracking-tighter">{u.email}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="bg-slate-900 text-[10px] text-slate-400 px-2 py-0.5 rounded border border-slate-700 font-black mb-1 block uppercase">Active Node</span>
-                    <p className="text-[10px] text-slate-500 font-bold">{new Date(u.joinedAt).toLocaleDateString()}</p>
-                  </div>
+        <div className="lg:col-span-2 space-y-6">
+          <Card title="Live Event Logs" className="bg-slate-900 border-slate-800 h-[400px] flex flex-col p-0 overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] space-y-2 bg-slate-950">
+              {logs.map((log, i) => (
+                <div key={i} className="flex space-x-3 animate-in fade-in slide-in-from-left-2">
+                  <span className="text-slate-600">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                  <span className={log.type === 'SUCCESS' ? 'text-green-400' : log.type === 'WARNING' ? 'text-yellow-500' : 'text-blue-400'}>
+                    {log.type}
+                  </span>
+                  <span className="text-slate-300">{log.message}</span>
                 </div>
               ))}
-              {stats.recentUsers.length === 0 && (
-                <div className="py-12 text-center text-slate-600 uppercase text-xs font-black tracking-widest italic opacity-30">
-                  Initializing network nodes...
-                </div>
-              )}
+              {logs.length === 0 && <div className="text-slate-700">Awaiting system events...</div>}
+              <div ref={logEndRef} />
+            </div>
+            <div className="bg-slate-900 px-4 py-2 border-t border-slate-800 flex justify-between items-center">
+              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest flex items-center">
+                <Terminal size={12} className="mr-2" /> Kernel Audit Active
+              </span>
+              <button onClick={() => setLogs([])} className="text-[9px] text-slate-600 hover:text-slate-400 uppercase font-black">Clear Buffer</button>
             </div>
           </Card>
         </div>
 
-        <div>
-          <Card title="Connectivity Pulse" className="border-slate-700 bg-slate-900/40">
+        <div className="space-y-6">
+          <Card title="Recent Nodes" className="bg-slate-800/30 border-slate-700/50">
             <div className="space-y-4">
-               <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                 <p className="text-[10px] text-blue-500 font-black uppercase mb-2">Sync Status</p>
-                 <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-slate-300">Database Engine</span>
-                    <span className="text-xs font-bold text-green-400">UP</span>
-                 </div>
-                 <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-300">Live Support API</span>
-                    <span className="text-xs font-bold text-blue-400">READY</span>
-                 </div>
-               </div>
-               <div className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl">
-                 <p className="text-[10px] text-slate-500 font-black uppercase mb-1">Notice</p>
-                 <p className="text-[11px] text-slate-400 leading-relaxed">
-                   Cross-tab broadcasting is enabled. New registrations will appear across all open administrator sessions within 2 seconds.
-                 </p>
-               </div>
+              {stats.recentUsers.map(u => (
+                <div key={u.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-xs">
+                      {u.fullName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white">{u.fullName}</p>
+                      <p className="text-[9px] text-slate-500">{u.email}</p>
+                    </div>
+                  </div>
+                  <Wifi size={12} className="text-green-500 opacity-50" />
+                </div>
+              ))}
             </div>
           </Card>
         </div>

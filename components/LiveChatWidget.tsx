@@ -1,14 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { MessageCircle, X, Mic, MicOff, Send, Loader2, Headset } from 'lucide-react';
-// Import Button component from local ui library
+import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
+import { MessageCircle, X, Mic, Send, Headset, ShieldCheck } from 'lucide-react';
 import { Button } from './ui';
+import { api } from '../services/api';
 
 export const LiveChatWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isActive, setIsActive] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const [transcription, setTranscription] = useState('');
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'agent', text: string}[]>([]);
   
@@ -18,44 +17,60 @@ export const LiveChatWidget: React.FC = () => {
   const streamRef = useRef<MediaStream | null>(null);
   const nextStartTimeRef = useRef<number>(0);
 
+  const queryNodeStatus: FunctionDeclaration = {
+    name: 'queryNodeStatus',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Check if a user is registered on the AbacusX network and their current KYC status.',
+      properties: {
+        email: { type: Type.STRING, description: 'The email address of the node to query.' }
+      },
+      required: ['email']
+    }
+  };
+
   const startLiveSession = async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
     outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
     
     try {
       streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         callbacks: {
           onopen: () => {
             setIsActive(true);
-            setIsListening(true);
-            
             const source = audioContextRef.current!.createMediaStreamSource(streamRef.current!);
             const scriptProcessor = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
-            
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createBlob(inputData);
               sessionPromise.then(session => session.sendRealtimeInput({ media: pcmBlob }));
             };
-            
             source.connect(scriptProcessor);
             scriptProcessor.connect(audioContextRef.current!.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
+            if (msg.toolCall) {
+              for (const fc of msg.toolCall.functionCalls) {
+                if (fc.name === 'queryNodeStatus') {
+                  const users = await api.getUsers();
+                  const found = users.find(u => u.email.toLowerCase() === (fc.args as any).email.toLowerCase());
+                  const result = found ? `User ${found.fullName} found. KYC Status: ${found.kycStatus}.` : 'No node found with that identifier.';
+                  sessionPromise.then(s => s.sendToolResponse({
+                    functionResponses: { id: fc.id, name: fc.name, response: { result } }
+                  }));
+                }
+              }
+            }
+
             if (msg.serverContent?.outputTranscription) {
               setTranscription(prev => prev + msg.serverContent!.outputTranscription!.text);
             }
-            
             if (msg.serverContent?.turnComplete) {
-              setChatHistory(prev => [...prev, { role: 'agent', text: 'Support Agent Response Received' }]);
               setTranscription('');
             }
-
             const base64Audio = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
               const ctx = outputAudioContextRef.current;
@@ -68,136 +83,81 @@ export const LiveChatWidget: React.FC = () => {
               nextStartTimeRef.current += audioBuffer.duration;
             }
           },
-          onerror: (e) => console.error("Live Chat Error", e),
           onclose: () => setIsActive(false)
         },
         config: {
           responseModalities: [Modality.AUDIO],
-          systemInstruction: "You are the AbacusX AI Support Agent. You help users with crypto investments, KYC, and technical platform issues. Be professional and institutional.",
+          tools: [{ functionDeclarations: [queryNodeStatus] }],
+          systemInstruction: "You are the AbacusX AI Support Agent. You have direct access to the platform's node database. If a user asks about their account or registration, use the queryNodeStatus tool to verify their details before answering. Be technical and professional.",
           outputAudioTranscription: {}
         }
       });
-      
       sessionRef.current = await sessionPromise;
-    } catch (err) {
-      console.error("Mic access failed", err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const stopSession = () => {
-    if (sessionRef.current) {
-      sessionRef.current.close();
-      sessionRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-    }
+    if (sessionRef.current) sessionRef.current.close();
+    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
     setIsActive(false);
-    setIsListening(false);
   };
 
-  // Helper functions for audio
   function decode(base64: string) {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     return bytes;
   }
-
-  async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: number, numChannels: number) {
-    const dataInt16 = new Int16Array(data.buffer);
-    const frameCount = dataInt16.length / numChannels;
-    const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-    for (let channel = 0; channel < numChannels; channel++) {
-      const channelData = buffer.getChannelData(channel);
-      for (let i = 0; i < frameCount; i++) channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+  async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sr: number, ch: number) {
+    const data16 = new Int16Array(data.buffer);
+    const buffer = ctx.createBuffer(ch, data16.length / ch, sr);
+    for (let c = 0; c < ch; c++) {
+      const cd = buffer.getChannelData(c);
+      for (let i = 0; i < buffer.length; i++) cd[i] = data16[i * ch + c] / 32768.0;
     }
     return buffer;
   }
-
   function encode(bytes: Uint8Array) {
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
+    let b = '';
+    for (let i = 0; i < bytes.byteLength; i++) b += String.fromCharCode(bytes[i]);
+    return btoa(b);
   }
-
   function createBlob(data: Float32Array) {
-    const int16 = new Int16Array(data.length);
-    for (let i = 0; i < data.length; i++) int16[i] = data[i] * 32768;
-    return { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' };
+    const i16 = new Int16Array(data.length);
+    for (let i = 0; i < data.length; i++) i16[i] = data[i] * 32768;
+    return { data: encode(new Uint8Array(i16.buffer)), mimeType: 'audio/pcm;rate=16000' };
   }
 
   return (
     <div className="fixed bottom-6 right-6 z-[9999]">
       {isOpen ? (
         <div className="w-80 md:w-96 bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4">
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 flex justify-between items-center">
+          <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white">
-                <Headset size={20} />
-              </div>
-              <div>
-                <h4 className="text-sm font-black text-white uppercase tracking-tight">AbacusX Live Support</h4>
-                <p className="text-[10px] text-blue-100 font-bold uppercase tracking-widest flex items-center">
-                  <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isActive ? 'bg-green-400 animate-pulse' : 'bg-slate-400'}`}></span>
-                  {isActive ? 'Live Connection' : 'Ready'}
-                </p>
-              </div>
+              <Headset size={20} className="text-blue-500" />
+              <h4 className="text-xs font-black text-white uppercase">AI Support Terminal</h4>
             </div>
-            <button onClick={() => { stopSession(); setIsOpen(false); }} className="text-white/80 hover:text-white">
+            <button onClick={() => { stopSession(); setIsOpen(false); }} className="text-slate-500 hover:text-white transition-colors">
               <X size={20} />
             </button>
           </div>
-
-          <div className="h-96 p-4 overflow-y-auto space-y-4 bg-slate-950 flex flex-col">
-            <div className="bg-slate-800/50 p-3 rounded-2xl border border-slate-700/50 text-xs text-slate-400 leading-relaxed italic">
-              "Welcome to AbacusX Live Terminal. Press 'Initiate Link' to speak with an AI specialist."
-            </div>
-            
-            {chatHistory.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-3 rounded-2xl text-xs font-medium ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300'}`}>
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-
-            {transcription && (
-               <div className="flex justify-start">
-                  <div className="max-w-[80%] p-3 rounded-2xl text-xs font-medium bg-slate-800/50 text-slate-400 border border-slate-700/50 italic animate-pulse">
-                    {transcription}
-                  </div>
-               </div>
-            )}
+          <div className="h-96 p-4 overflow-y-auto space-y-4 bg-slate-950 font-mono text-[11px] leading-relaxed">
+            <div className="text-blue-500 opacity-50">INITIALIZING SUPPORT PROTOCOL... SUCCESS</div>
+            <div className="text-slate-500">Node ID: Support-Agent-01</div>
+            {isActive && <div className="text-green-500 animate-pulse">LIVE LINK ESTABLISHED</div>}
+            {transcription && <div className="text-slate-300 italic">"{transcription}"</div>}
           </div>
-
-          <div className="p-4 bg-slate-900 border-t border-slate-800">
+          <div className="p-4 bg-slate-900 border-t border-slate-700">
             {isActive ? (
-               <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                     <div className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center animate-pulse">
-                        <Mic size={16} />
-                     </div>
-                     <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Listening...</span>
-                  </div>
-                  {/* Fixed missing Button component usage by adding import */}
-                  <Button variant="danger" size="sm" onClick={stopSession} className="rounded-xl">Terminate Link</Button>
-               </div>
+              <Button variant="danger" className="w-full text-[10px] font-black uppercase py-4" onClick={stopSession}>Terminate Link</Button>
             ) : (
-               /* Fixed missing Button component usage by adding import */
-               <Button onClick={startLiveSession} className="w-full py-3 rounded-2xl font-black uppercase tracking-widest text-[10px]">
-                  Initiate Support Link
-               </Button>
+              <Button className="w-full text-[10px] font-black uppercase py-4" onClick={startLiveSession}>Initiate AI Link</Button>
             )}
           </div>
         </div>
       ) : (
-        <button 
-          onClick={() => setIsOpen(true)}
-          className="w-16 h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-all border-4 border-slate-900 group"
-        >
-          <MessageCircle size={28} className="group-hover:rotate-12 transition-transform" />
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 border-2 border-slate-900 rounded-full animate-bounce"></span>
+        <button onClick={() => setIsOpen(true)} className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-2xl border-4 border-slate-900 hover:scale-110 transition-transform">
+          <MessageCircle size={28} />
         </button>
       )}
     </div>

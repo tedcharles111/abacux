@@ -3,8 +3,9 @@ import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestmen
 
 const USERS_STORAGE_KEY = 'abacusx_users_db';
 export const DB_UPDATE_EVENT = 'abacusx_db_updated';
+export const SYSTEM_LOG_EVENT = 'abacusx_system_log';
 
-// Use BroadcastChannel for robust cross-tab synchronization
+// Robust Broadcast Channel
 const syncChannel = new BroadcastChannel('abacusx_sync_channel');
 
 const INITIAL_USERS: User[] = [
@@ -30,6 +31,14 @@ const INITIAL_USERS: User[] = [
   }
 ];
 
+const logSystemEvent = (message: string, type: 'INFO' | 'SUCCESS' | 'WARNING' = 'INFO') => {
+  const event = new CustomEvent(SYSTEM_LOG_EVENT, { 
+    detail: { message, type, timestamp: new Date().toISOString() } 
+  });
+  window.dispatchEvent(event);
+  syncChannel.postMessage({ type: 'LOG', detail: { message, type, timestamp: new Date().toISOString() } });
+};
+
 const getStoredUsers = (): User[] => {
   const stored = localStorage.getItem(USERS_STORAGE_KEY);
   if (!stored) {
@@ -38,43 +47,30 @@ const getStoredUsers = (): User[] => {
   }
   try {
     const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) throw new Error("Format error");
-    return parsed;
+    return Array.isArray(parsed) ? parsed : INITIAL_USERS;
   } catch (e) {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
-    return [...INITIAL_USERS];
+    return INITIAL_USERS;
   }
 };
 
 const saveUsers = (users: User[]) => {
-  try {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-    // Signal update to current tab
-    window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
-    // Signal update to all other tabs
-    syncChannel.postMessage({ type: 'DB_UPDATED' });
-  } catch (e) {
-    console.error("Critical: Storage Write Failed", e);
-  }
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
+  syncChannel.postMessage({ type: 'DB_UPDATED' });
 };
 
-// Listen for sync messages from other tabs
 syncChannel.onmessage = (event) => {
   if (event.data.type === 'DB_UPDATED') {
     window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
+  } else if (event.data.type === 'LOG') {
+    window.dispatchEvent(new CustomEvent(SYSTEM_LOG_EVENT, { detail: event.data.detail }));
   }
 };
 
-let currentPrices = {
-  btc: 64230.12,
-  eth: 3450.45,
-  sol: 145.20
-};
-
+let currentPrices = { btc: 64230.12, eth: 3450.45, sol: 145.20 };
 setInterval(() => {
   currentPrices.btc += (Math.random() - 0.5) * 20;
   currentPrices.eth += (Math.random() - 0.5) * 5;
-  currentPrices.sol += (Math.random() - 0.5) * 0.5;
   window.dispatchEvent(new CustomEvent('market_price_update', { detail: currentPrices }));
 }, 3000);
 
@@ -82,16 +78,16 @@ export const api = {
   getCurrentPrices: () => currentPrices,
 
   login: async (email: string, password: string): Promise<User> => {
-    const users = getStoredUsers();
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const user = getStoredUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
     if (!user) throw new Error('Invalid credentials');
+    logSystemEvent(`Session started: ${user.fullName} (${user.role})`, 'SUCCESS');
     return user;
   },
 
   register: async (fullName: string, email: string, password: string): Promise<User> => {
     const users = getStoredUsers();
     if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-      throw new Error('User already exists');
+      throw new Error('Node collision: User exists');
     }
     const newUser: User = {
       id: `u${Date.now()}`,
@@ -103,8 +99,8 @@ export const api = {
       twoFactorEnabled: false,
       joinedAt: new Date().toISOString()
     };
-    const updatedList = [...users, newUser];
-    saveUsers(updatedList);
+    saveUsers([...users, newUser]);
+    logSystemEvent(`New node registered: ${fullName} (${email})`, 'SUCCESS');
     return newUser;
   },
 
@@ -120,6 +116,7 @@ export const api = {
     if (index !== -1) {
       users[index].adminDisplayAdjustment = data;
       saveUsers(users);
+      logSystemEvent(`Ledger adjusted for UID: ${userId}`, 'WARNING');
       return users[index];
     }
     return undefined;
@@ -129,16 +126,14 @@ export const api = {
     { id: 'p1', name: 'Stable Saver', apr: 5.5, durationDays: 30, minDeposit: 100, riskLevel: 'LOW', description: 'Low risk stablecoin yield farming.' },
     { id: 'p2', name: 'Growth Alpha', apr: 12.0, durationDays: 90, minDeposit: 500, riskLevel: 'MEDIUM', description: 'Balanced crypto basket rebalancing.' },
   ],
-  
-  getTransactions: async (userId: string) => [],
-  getActiveInvestments: async (userId: string) => [],
-  
+
   submitKYC: async (userId: string, formData: any) => {
     const users = getStoredUsers();
     const index = users.findIndex(u => u.id === userId);
     if (index !== -1) {
       users[index].kycStatus = KYCStatus.PENDING;
       saveUsers(users);
+      logSystemEvent(`KYC Payload received for UID: ${userId}`, 'INFO');
       return true;
     }
     return false;
