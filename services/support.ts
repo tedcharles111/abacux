@@ -22,9 +22,10 @@ export interface SupportTicket {
   userUnreadCount: number;
 }
 
-const STORAGE_KEY = 'abacusx_support_v7';
-const SYNC_CHANNEL = 'abacusx_sync_v7';
+const STORAGE_KEY = 'abacusx_support_v8';
+const SYNC_CHANNEL = 'abacusx_sync_v8';
 const UPDATE_EVENT = 'abacusx_support_update';
+const MESSAGE_EVENT = 'abacusx_new_message';
 const TYPING_EVENT = 'abacusx_typing_update';
 
 const bc = new BroadcastChannel(SYNC_CHANNEL);
@@ -38,10 +39,19 @@ const getLedger = (): Record<string, SupportTicket> => {
   }
 };
 
-const saveLedger = (db: Record<string, SupportTicket>) => {
+const saveLedger = (db: Record<string, SupportTicket>, lastMessage?: ChatMessage) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+  
+  // BROADCAST 1: General Refresh
   window.dispatchEvent(new CustomEvent(UPDATE_EVENT));
   bc.postMessage({ type: 'REFRESH' });
+
+  // BROADCAST 2: Specific Message Payload (Direct Pipe)
+  if (lastMessage) {
+    const detail = { message: lastMessage, userId: lastMessage.isFromUser ? lastMessage.senderId : 'admin' };
+    window.dispatchEvent(new CustomEvent(MESSAGE_EVENT, { detail }));
+    bc.postMessage({ type: 'NEW_MESSAGE', ...detail });
+  }
 };
 
 export const supportService = {
@@ -58,8 +68,9 @@ export const supportService = {
   },
 
   setTyping: (userId: string, isTyping: boolean) => {
-    bc.postMessage({ type: 'TYPING', userId, isTyping });
-    window.dispatchEvent(new CustomEvent(TYPING_EVENT, { detail: { userId, isTyping } }));
+    const detail = { userId, isTyping };
+    bc.postMessage({ type: 'TYPING', ...detail });
+    window.dispatchEvent(new CustomEvent(TYPING_EVENT, { detail }));
   },
 
   sendMessage: (userId: string, userName: string, text: string, isFromUser: boolean, isAI: boolean = false) => {
@@ -67,14 +78,8 @@ export const supportService = {
     
     if (!db[userId]) {
       db[userId] = {
-        userId,
-        userName,
-        lastMessage: '',
-        lastTimestamp: '',
-        status: 'OPEN',
-        messages: [],
-        unreadCount: 0,
-        userUnreadCount: 0
+        userId, userName, lastMessage: '', lastTimestamp: '',
+        status: 'OPEN', messages: [], unreadCount: 0, userUnreadCount: 0
       };
     }
 
@@ -92,41 +97,27 @@ export const supportService = {
     db[userId].lastMessage = text;
     db[userId].lastTimestamp = newMessage.timestamp;
     
-    if (isFromUser) {
-      db[userId].unreadCount += 1;
-    } else {
-      db[userId].userUnreadCount += 1;
-    }
+    if (isFromUser) db[userId].unreadCount += 1;
+    else db[userId].userUnreadCount += 1;
 
-    saveLedger(db);
+    saveLedger(db, newMessage);
     return newMessage;
   },
 
-  // Get automated response from Gemini
   getAIResponse: async (userId: string, userName: string, userMessage: string) => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const ticket = supportService.getTicket(userId);
-    const history = ticket?.messages.slice(-5).map(m => 
-      `${m.senderName}: ${m.text}`
-    ).join('\n') || '';
+    const history = ticket?.messages.slice(-5).map(m => `${m.senderName}: ${m.text}`).join('\n') || '';
 
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `You are the AbacusX Customer Support AI. You are helping ${userName}. 
-        AbacusX is a secure crypto platform. 
-        Current User Context: ${userName} is asking: "${userMessage}".
-        Previous History: ${history}
-        
-        Keep your response helpful, concise (under 3 sentences), and professional. 
-        If asked about technical issues, tell them a human specialist is being notified.`,
+        contents: `You are the AbacusX AI Agent. User: ${userName}. Message: "${userMessage}". History: ${history}. Be concise and professional.`,
       });
-
-      const aiText = response.text || "I'm having trouble connecting to my knowledge base, but a specialist will be with you shortly.";
+      const aiText = response.text || "A specialist is connecting now.";
       supportService.sendMessage(userId, userName, aiText, false, true);
     } catch (e) {
-      console.error("AI Response failed", e);
-      supportService.sendMessage(userId, userName, "Our support systems are high load. Please wait for a human agent.", false, true);
+      supportService.sendMessage(userId, userName, "Connection busy. Please wait.", false, true);
     }
   },
 
@@ -139,23 +130,29 @@ export const supportService = {
     }
   },
 
-  subscribe: (callback: () => void) => {
-    const handler = () => callback();
-    window.addEventListener(UPDATE_EVENT, handler);
-    bc.onmessage = (e) => {
-      if (e.data.type === 'REFRESH') handler();
+  // HIGH-SPEED SUBSCRIPTIONS
+  subscribeToAll: (callback: () => void) => {
+    window.addEventListener(UPDATE_EVENT, callback);
+    bc.addEventListener('message', (e) => { if (e.data.type === 'REFRESH') callback(); });
+    return () => window.removeEventListener(UPDATE_EVENT, callback);
+  },
+
+  subscribeToMessages: (callback: (payload: { message: ChatMessage, userId: string }) => void) => {
+    const handler = (e: any) => callback(e.detail);
+    window.addEventListener(MESSAGE_EVENT, handler);
+    const bcHandler = (e: any) => { if (e.data.type === 'NEW_MESSAGE') callback({ message: e.data.message, userId: e.data.userId }); };
+    bc.addEventListener('message', bcHandler);
+    return () => {
+      window.removeEventListener(MESSAGE_EVENT, handler);
+      bc.removeEventListener('message', bcHandler);
     };
-    return () => window.removeEventListener(UPDATE_EVENT, handler);
   },
 
   subscribeToTyping: (callback: (userId: string, isTyping: boolean) => void) => {
     const handler = (e: any) => callback(e.detail.userId, e.detail.isTyping);
     window.addEventListener(TYPING_EVENT, handler);
-    const bcHandler = (e: any) => {
-      if (e.data.type === 'TYPING') callback(e.data.userId, e.data.isTyping);
-    };
+    const bcHandler = (e: any) => { if (e.data.type === 'TYPING') callback(e.data.userId, e.data.isTyping); };
     bc.addEventListener('message', bcHandler);
-    
     return () => {
       window.removeEventListener(TYPING_EVENT, handler);
       bc.removeEventListener('message', bcHandler);
