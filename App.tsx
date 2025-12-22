@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 import { User, UserRole } from './types';
-import { LiveChatWidget } from './components/LiveChatWidget';
 
 // Pages - Authenticated
 import { Dashboard } from './pages/Dashboard';
@@ -12,7 +11,6 @@ import { Investments } from './pages/Investments';
 import { KYC } from './pages/KYC';
 import { AdminUserDetail } from './pages/admin/AdminUserDetail';
 import { AdminUsers } from './pages/admin/AdminUsers';
-import { AdminSupport } from './pages/admin/AdminSupport';
 
 // Pages - Public
 import { Home } from './pages/Home';
@@ -101,15 +99,15 @@ export default function App() {
         case 'admin_dashboard':
            return (
              <div className="space-y-6">
-               <h1 className="text-2xl font-bold text-white">Admin Overview</h1>
+               <h1 className="text-2xl font-bold text-white uppercase tracking-tight">Admin Overview</h1>
                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                    <h3 className="text-slate-400 text-sm">Total Assets</h3>
-                    <p className="text-2xl font-bold text-white mt-2">$2.4M</p>
+                  <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
+                    <h3 className="text-slate-500 text-xs font-black uppercase tracking-widest">Total Managed Assets</h3>
+                    <p className="text-3xl font-black text-white mt-3">$2.4M</p>
                   </div>
-                  <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                    <h3 className="text-slate-400 text-sm">Active Users</h3>
-                    <p className="text-2xl font-bold text-white mt-2">1,245</p>
+                  <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
+                    <h3 className="text-slate-500 text-xs font-black uppercase tracking-widest">Active Trading Nodes</h3>
+                    <p className="text-3xl font-black text-white mt-3">1,245</p>
                   </div>
                </div>
              </div>
@@ -136,8 +134,6 @@ export default function App() {
               }} 
             />
           );
-        case 'admin_support':
-          return <AdminSupport />;
         default:
           return <Dashboard user={user} onNavigate={navigate} />;
       }
@@ -153,7 +149,6 @@ export default function App() {
   return (
     <>
       {renderContent()}
-      {user?.role !== UserRole.ADMIN && <LiveChatWidget user={user} />}
     </>
   );
 }

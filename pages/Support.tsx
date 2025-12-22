@@ -1,5 +1,7 @@
+
 import React, { useState } from 'react';
-import { Mail, MessageCircle, FileText } from 'lucide-react';
+/* Added CheckCircle to imports */
+import { Mail, FileText, HelpCircle, ShieldCheck, CheckCircle } from 'lucide-react';
 import { Button, Input } from '../components/ui';
 
 export const Support: React.FC = () => {
@@ -10,91 +12,80 @@ export const Support: React.FC = () => {
     setSent(true);
   };
 
-  const triggerLiveChat = () => {
-    const event = new CustomEvent('open-live-chat');
-    window.dispatchEvent(event);
-  };
-
   return (
-    <div className="py-16">
-      <div className="max-w-3xl mx-auto px-4">
-        <h1 className="text-4xl font-bold text-white text-center mb-4">How can we help?</h1>
-        <p className="text-slate-400 text-center mb-12">Search our knowledge base or get in touch with our team.</p>
+    <div className="py-20">
+      <div className="max-w-4xl mx-auto px-6">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl md:text-5xl font-black text-white mb-6 uppercase tracking-tight">Support Center</h1>
+          <p className="text-lg text-slate-400 max-w-2xl mx-auto">Access our institutional knowledge base or connect with a specialist through our secure channels.</p>
+        </div>
 
         {/* Contact Options */}
-        <div className="grid md:grid-cols-3 gap-6 mb-16">
-           <div 
-             onClick={triggerLiveChat}
-             className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer group"
-           >
-             <MessageCircle className="mx-auto text-blue-400 mb-4 group-hover:scale-110 transition-transform" size={32} />
-             <h3 className="text-white font-bold">Live Chat</h3>
-             <p className="text-sm text-slate-500 mt-2">Available 24/7</p>
+        <div className="grid md:grid-cols-2 gap-8 mb-20">
+           <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 text-center hover:border-blue-500 transition-all cursor-pointer group shadow-xl">
+             <Mail className="mx-auto text-blue-400 mb-6 group-hover:scale-110 transition-transform" size={48} />
+             <h3 className="text-white font-black text-xl mb-2">Email Terminal</h3>
+             <p className="text-sm text-slate-500 leading-relaxed">Direct encrypted communication with our specialist nodes. Response latency: &lt; 24h.</p>
            </div>
-           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer group">
-             <Mail className="mx-auto text-purple-400 mb-4 group-hover:scale-110 transition-transform" size={32} />
-             <h3 className="text-white font-bold">Email Us</h3>
-             <p className="text-sm text-slate-500 mt-2">Response in 24h</p>
-           </div>
-           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 text-center hover:border-blue-500 transition-colors cursor-pointer group">
-             <FileText className="mx-auto text-green-400 mb-4 group-hover:scale-110 transition-transform" size={32} />
-             <h3 className="text-white font-bold">Docs</h3>
-             <p className="text-sm text-slate-500 mt-2">Read guides</p>
+           <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 text-center hover:border-blue-500 transition-all cursor-pointer group shadow-xl">
+             <FileText className="mx-auto text-purple-400 mb-6 group-hover:scale-110 transition-transform" size={48} />
+             <h3 className="text-white font-black text-xl mb-2">Technical Docs</h3>
+             <p className="text-sm text-slate-500 leading-relaxed">Browse detailed guides on security, trading protocols, and API integrations.</p>
            </div>
         </div>
 
         {/* FAQ */}
-        <div className="space-y-6 mb-16">
-          <h2 className="text-2xl font-bold text-white">Frequently Asked Questions</h2>
-          <div className="space-y-4">
-            <details className="bg-slate-900 rounded-lg p-4 cursor-pointer group">
-              <summary className="font-medium text-white list-none flex justify-between items-center">
-                Is AbacusX safe?
-                <span className="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
-              </summary>
-              <p className="mt-4 text-slate-400">Yes, we use cold storage for 98% of assets and have a comprehensive insurance policy.</p>
-            </details>
-            <details className="bg-slate-900 rounded-lg p-4 cursor-pointer group">
-              <summary className="font-medium text-white list-none flex justify-between items-center">
-                What are the trading fees?
-                <span className="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
-              </summary>
-              <p className="mt-4 text-slate-400">Our fees start at 0.1% for takers and 0.05% for makers, decreasing with volume.</p>
-            </details>
-            <details className="bg-slate-900 rounded-lg p-4 cursor-pointer group">
-              <summary className="font-medium text-white list-none flex justify-between items-center">
-                How do I verify my identity?
-                <span className="text-slate-500 group-open:rotate-180 transition-transform">▼</span>
-              </summary>
-              <p className="mt-4 text-slate-400">Go to Settings &gt; Identity Verification and upload your government ID.</p>
-            </details>
+        <div className="space-y-8 mb-20">
+          <h2 className="text-2xl font-black text-white flex items-center">
+            <HelpCircle className="mr-3 text-blue-500" /> Standard Protocols (FAQ)
+          </h2>
+          <div className="grid gap-4">
+            {[
+              { q: "Is AbacusX regulated?", a: "We operate in full compliance with global AML/KYC standards and hold multiple regional licenses." },
+              { q: "How are my private keys managed?", a: "Keys are distributed via Multi-Party Computation (MPC) and never exist on a single machine." },
+              { q: "What is the withdrawal cooldown?", a: "For security, new accounts have a 24h cooldown after the first successful KYC verification." }
+            ].map((faq, idx) => (
+              <details key={idx} className="bg-slate-900 rounded-2xl p-6 cursor-pointer group border border-slate-800 hover:border-slate-700 transition-colors">
+                <summary className="font-bold text-white list-none flex justify-between items-center uppercase text-sm tracking-wide">
+                  {faq.q}
+                  <span className="text-slate-600 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <p className="mt-4 text-slate-400 text-sm leading-relaxed">{faq.a}</p>
+              </details>
+            ))}
           </div>
         </div>
 
         {/* Contact Form */}
-        <div className="bg-slate-900 rounded-2xl p-8 border border-slate-800">
-          <h2 className="text-2xl font-bold text-white mb-6">Send us a message</h2>
+        <div className="bg-slate-900 rounded-[2.5rem] p-10 border border-slate-800 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-5">
+             <ShieldCheck size={120} className="text-blue-500" />
+          </div>
+          <h2 className="text-3xl font-black text-white mb-8">Initiate Ticket</h2>
           {sent ? (
-             <div className="bg-green-900/20 border border-green-800 text-green-400 p-4 rounded-lg text-center">
-               Message sent successfully! We will get back to you shortly.
+             <div className="bg-green-900/10 border border-green-800 text-green-400 p-8 rounded-2xl text-center animate-in zoom-in-95 duration-300">
+               <CheckCircle className="mx-auto mb-4" size={48} />
+               <p className="font-bold text-lg">Packet Successfully Transmitted</p>
+               <p className="text-sm opacity-70 mt-2">A specialist will synchronize with you via email shortly.</p>
              </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <Input placeholder="Your Name" />
-                <Input placeholder="Email Address" type="email" />
+            <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+              <div className="grid md:grid-cols-2 gap-6">
+                <Input placeholder="Full Name" />
+                <Input placeholder="Node Email" type="email" />
               </div>
-              <select className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none">
+              <select className="w-full bg-slate-950 border border-slate-700 rounded-xl px-6 py-4 text-sm text-white focus:border-blue-500 outline-none transition-all font-bold">
                 <option>General Inquiry</option>
-                <option>Technical Support</option>
-                <option>Partnership</option>
+                <option>Security / KYC Protocol</option>
+                <option>Technical Infrastructure</option>
+                <option>Institutional Partnership</option>
               </select>
               <textarea 
-                rows={4} 
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none"
-                placeholder="Describe your issue..."
+                rows={5} 
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-6 py-4 text-sm text-white focus:border-blue-500 outline-none transition-all placeholder:text-slate-800 font-medium"
+                placeholder="Detailed description of your synchronization request..."
               ></textarea>
-              <Button type="submit" className="w-full">Submit Request</Button>
+              <Button type="submit" className="w-full py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs">Transmit Payload</Button>
             </form>
           )}
         </div>

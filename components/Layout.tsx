@@ -4,7 +4,7 @@ import { User, UserRole } from '../types';
 import { Badge } from './ui';
 import { 
   LayoutDashboard, Wallet, TrendingUp, ShieldCheck, 
-  Settings, LogOut, Menu, X, Users, Activity, MessageSquare
+  Settings, LogOut, Menu, X, Users, Activity
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -69,7 +69,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, curren
                 <div className="px-4 pb-2 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800/50">Admin Console</div>
                 <NavItem page="admin_dashboard" icon={Activity} label="Overview" />
                 <NavItem page="admin_users" icon={Users} label="User Management" />
-                <NavItem page="admin_support" icon={MessageSquare} label="Support Mgmt" />
               </>
             )}
           </div>
