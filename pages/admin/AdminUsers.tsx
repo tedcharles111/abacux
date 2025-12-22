@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../../types';
 import { api, DB_UPDATE_EVENT } from '../../services/api';
 import { Badge, Button } from '../../components/ui';
-import { RefreshCw, Search, Filter, Download, Activity } from 'lucide-react';
+import { RefreshCw, Search, Filter, Download, Activity, Database } from 'lucide-react';
 
 interface AdminUsersProps {
   onNavigate: (page: string) => void;
@@ -21,12 +21,18 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
     if (!isSilent) setRefreshing(true);
     try {
       const data = await api.getUsers();
-      setUsers([...data]); // Spread to ensure new array reference
+      // Only update state if data length differs or upon explicit refresh to avoid render thrashing
+      setUsers(prev => {
+        if (JSON.stringify(prev) !== JSON.stringify(data)) {
+           return [...data];
+        }
+        return prev;
+      });
       setLastUpdated(new Date());
     } catch (error) {
       console.error("Failed to fetch users", error);
     } finally {
-      setRefreshing(false);
+      if (!isSilent) setRefreshing(false);
       setLoading(false);
     }
   }, []);
@@ -34,21 +40,23 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
   useEffect(() => {
     fetchUsers();
 
-    // Listen for market price updates to keep balance estimations fresh
+    // 1. Polling Interval (The Safety Net)
+    // Fetches every 2 seconds to guarantee consistency across tabs/windows
+    const pollInterval = setInterval(() => {
+      fetchUsers(true);
+    }, 2000);
+
+    // 2. Event Listeners (Instant Reactivity)
     const handlePriceUpdate = (e: any) => {
       setPrices({ ...e.detail });
     };
 
-    // Listen for database updates (same tab)
     const handleDbUpdate = () => {
-      console.log("Database update detected, refreshing user list...");
       fetchUsers(true);
     };
 
-    // Listen for storage changes (other tabs)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'abacusx_users_db') {
-        console.log("Cross-tab database update detected...");
         fetchUsers(true);
       }
     };
@@ -58,6 +66,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
+      clearInterval(pollInterval);
       window.removeEventListener('market_price_update', handlePriceUpdate);
       window.removeEventListener(DB_UPDATE_EVENT, handleDbUpdate);
       window.removeEventListener('storage', handleStorageChange);
@@ -90,26 +99,32 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-black text-white uppercase tracking-tight">User Management</h1>
-          <p className="text-slate-500 text-xs mt-1">
-            Last Sync: {lastUpdated.toLocaleTimeString()} 
-            <span className="mx-2">•</span>
-            {users.length} Active Nodes
-          </p>
+          <div className="flex items-center space-x-2 text-xs mt-1">
+             <span className="flex items-center text-green-400 font-bold">
+               <span className="relative flex h-2 w-2 mr-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                Live Sync Active
+             </span>
+             <span className="text-slate-600">•</span>
+             <span className="text-slate-500">Updated: {lastUpdated.toLocaleTimeString()}</span>
+          </div>
         </div>
         <div className="flex items-center space-x-3 w-full md:w-auto">
           <Button 
-            onClick={() => fetchUsers()} 
+            onClick={() => fetchUsers(false)} 
             variant="outline" 
             size="sm" 
             className="flex-1 md:flex-none"
             isLoading={refreshing}
           >
             <RefreshCw size={14} className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Sync Database
+            Force Refresh
           </Button>
           <Button variant="outline" size="sm" className="flex-1 md:flex-none opacity-50 cursor-not-allowed">
             <Download size={14} className="mr-2" />
-            Export
+            Export CSV
           </Button>
         </div>
       </div>
@@ -120,7 +135,16 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
                <Activity size={20} />
             </div>
             <div className="text-right">
-               <p className="text-[10px] text-slate-500 font-black uppercase">Live Connections</p>
+               <p className="text-[10px] text-slate-500 font-black uppercase">Active Sessions</p>
+               <p className="text-lg font-black text-white">{users.length}</p>
+            </div>
+         </div>
+         <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
+               <Database size={20} />
+            </div>
+            <div className="text-right">
+               <p className="text-[10px] text-slate-500 font-black uppercase">Database Nodes</p>
                <p className="text-lg font-black text-white">{users.length}</p>
             </div>
          </div>
@@ -201,7 +225,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
             <span>Database Interface: Synchronized</span>
           </div>
-          <span className="opacity-50">v4.2.1-Node-Secure</span>
+          <span className="opacity-50">v4.3.0-Polling-Enabled</span>
         </div>
       </div>
     </div>

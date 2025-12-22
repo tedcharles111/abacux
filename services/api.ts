@@ -30,22 +30,32 @@ const INITIAL_USERS: User[] = [
 const getStoredUsers = (): User[] => {
   const stored = localStorage.getItem(USERS_STORAGE_KEY);
   if (!stored) {
+    console.log("Initializing database with default users.");
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
-    return INITIAL_USERS;
+    return [...INITIAL_USERS]; // Return copy
   }
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+       throw new Error("Stored data is not an array");
+    }
+    return parsed;
   } catch (e) {
-    console.error("Malformed DB found, resetting...");
+    console.error("Malformed DB found, resetting...", e);
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
-    return INITIAL_USERS;
+    return [...INITIAL_USERS]; // Return copy
   }
 };
 
 const saveUsers = (users: User[]) => {
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-  // Dispatch event for same-tab reactivity
-  window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
+  try {
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    // Dispatch event for same-tab reactivity
+    window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
+    console.log(`Database updated. Count: ${users.length}`);
+  } catch (e) {
+    console.error("Failed to save to localStorage", e);
+  }
 };
 
 // Real-time market state
