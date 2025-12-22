@@ -21,13 +21,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
     if (!isSilent) setRefreshing(true);
     try {
       const data = await api.getUsers();
-      // Only update state if data length differs or upon explicit refresh to avoid render thrashing
-      setUsers(prev => {
-        if (JSON.stringify(prev) !== JSON.stringify(data)) {
-           return [...data];
-        }
-        return prev;
-      });
+      // Directly update users to ensure absolute UI consistency
+      setUsers([...data]);
       setLastUpdated(new Date());
     } catch (error) {
       console.error("Failed to fetch users", error);
@@ -40,13 +35,12 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
   useEffect(() => {
     fetchUsers();
 
-    // 1. Polling Interval (The Safety Net)
-    // Fetches every 2 seconds to guarantee consistency across tabs/windows
+    // Polling Interval (The Safety Net)
     const pollInterval = setInterval(() => {
       fetchUsers(true);
     }, 2000);
 
-    // 2. Event Listeners (Instant Reactivity)
+    // Event Listeners
     const handlePriceUpdate = (e: any) => {
       setPrices({ ...e.detail });
     };
@@ -129,27 +123,6 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-         <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
-               <Activity size={20} />
-            </div>
-            <div className="text-right">
-               <p className="text-[10px] text-slate-500 font-black uppercase">Active Sessions</p>
-               <p className="text-lg font-black text-white">{users.length}</p>
-            </div>
-         </div>
-         <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
-               <Database size={20} />
-            </div>
-            <div className="text-right">
-               <p className="text-[10px] text-slate-500 font-black uppercase">Database Nodes</p>
-               <p className="text-lg font-black text-white">{users.length}</p>
-            </div>
-         </div>
-      </div>
-
       <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-300">
@@ -225,7 +198,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
             <span>Database Interface: Synchronized</span>
           </div>
-          <span className="opacity-50">v4.3.0-Polling-Enabled</span>
+          <span className="opacity-50">v4.4.1-Direct-Sync</span>
         </div>
       </div>
     </div>

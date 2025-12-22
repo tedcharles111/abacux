@@ -11,6 +11,7 @@ import { Investments } from './pages/Investments';
 import { KYC } from './pages/KYC';
 import { AdminUserDetail } from './pages/admin/AdminUserDetail';
 import { AdminUsers } from './pages/admin/AdminUsers';
+import { AdminDashboard } from './pages/admin/AdminDashboard';
 
 // Pages - Public
 import { Home } from './pages/Home';
@@ -97,21 +98,7 @@ export default function App() {
         case 'invest': return <Investments user={user} />;
         case 'kyc': return <KYC user={user} />;
         case 'admin_dashboard':
-           return (
-             <div className="space-y-6">
-               <h1 className="text-2xl font-bold text-white uppercase tracking-tight">Admin Overview</h1>
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
-                    <h3 className="text-slate-500 text-xs font-black uppercase tracking-widest">Total Managed Assets</h3>
-                    <p className="text-3xl font-black text-white mt-3">$2.4M</p>
-                  </div>
-                  <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
-                    <h3 className="text-slate-500 text-xs font-black uppercase tracking-widest">Active Trading Nodes</h3>
-                    <p className="text-3xl font-black text-white mt-3">1,245</p>
-                  </div>
-               </div>
-             </div>
-           );
+           return <AdminDashboard onNavigate={navigate} />;
         case 'admin_users':
           return (
             <AdminUsers 
