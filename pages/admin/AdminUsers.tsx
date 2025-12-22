@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../../types';
-import { api } from '../../services/api';
+import { api, DB_UPDATE_EVENT } from '../../services/api';
 import { Badge, Button } from '../../components/ui';
+import { RefreshCw, Search, Filter, Download, Activity } from 'lucide-react';
 
 interface AdminUsersProps {
   onNavigate: (page: string) => void;
@@ -11,91 +13,195 @@ interface AdminUsersProps {
 export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [prices, setPrices] = useState(api.getCurrentPrices());
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const data = await api.getUsers();
-        setUsers(data);
-      } catch (error) {
-        console.error("Failed to fetch users", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsers();
+  const fetchUsers = useCallback(async (isSilent = false) => {
+    if (!isSilent) setRefreshing(true);
+    try {
+      const data = await api.getUsers();
+      setUsers([...data]); // Spread to ensure new array reference
+      setLastUpdated(new Date());
+    } catch (error) {
+      console.error("Failed to fetch users", error);
+    } finally {
+      setRefreshing(false);
+      setLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchUsers();
+
+    // Listen for market price updates to keep balance estimations fresh
+    const handlePriceUpdate = (e: any) => {
+      setPrices({ ...e.detail });
+    };
+
+    // Listen for database updates (same tab)
+    const handleDbUpdate = () => {
+      console.log("Database update detected, refreshing user list...");
+      fetchUsers(true);
+    };
+
+    // Listen for storage changes (other tabs)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'abacusx_users_db') {
+        console.log("Cross-tab database update detected...");
+        fetchUsers(true);
+      }
+    };
+
+    window.addEventListener('market_price_update', handlePriceUpdate);
+    window.addEventListener(DB_UPDATE_EVENT, handleDbUpdate);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('market_price_update', handlePriceUpdate);
+      window.removeEventListener(DB_UPDATE_EVENT, handleDbUpdate);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [fetchUsers]);
+
+  const calculateEstimation = (user: User) => {
+    if (user.adminDisplayAdjustment?.visible) {
+      return user.adminDisplayAdjustment.amount;
+    }
+    return (
+      (user.balance.btc * prices.btc) + 
+      (user.balance.eth * prices.eth) + 
+      user.balance.usdt + 
+      user.balance.usd
+    );
+  };
+
   if (loading) {
-    return <div className="text-white p-8">Loading users...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <RefreshCw className="text-blue-500 animate-spin" size={32} />
+        <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Synchronizing User Nodes...</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-white">User Management</h1>
-        <Button onClick={() => {}} disabled variant="outline">Export CSV</Button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-white uppercase tracking-tight">User Management</h1>
+          <p className="text-slate-500 text-xs mt-1">
+            Last Sync: {lastUpdated.toLocaleTimeString()} 
+            <span className="mx-2">•</span>
+            {users.length} Active Nodes
+          </p>
+        </div>
+        <div className="flex items-center space-x-3 w-full md:w-auto">
+          <Button 
+            onClick={() => fetchUsers()} 
+            variant="outline" 
+            size="sm" 
+            className="flex-1 md:flex-none"
+            isLoading={refreshing}
+          >
+            <RefreshCw size={14} className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Sync Database
+          </Button>
+          <Button variant="outline" size="sm" className="flex-1 md:flex-none opacity-50 cursor-not-allowed">
+            <Download size={14} className="mr-2" />
+            Export
+          </Button>
+        </div>
       </div>
 
-      <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+         <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 flex items-center justify-between">
+            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+               <Activity size={20} />
+            </div>
+            <div className="text-right">
+               <p className="text-[10px] text-slate-500 font-black uppercase">Live Connections</p>
+               <p className="text-lg font-black text-white">{users.length}</p>
+            </div>
+         </div>
+      </div>
+
+      <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-900/50 uppercase text-xs font-semibold text-slate-500">
+            <thead className="bg-slate-900 uppercase text-[10px] font-black text-slate-500 tracking-widest border-b border-slate-700">
                <tr>
-                 <th className="px-6 py-4">User Details</th>
-                 <th className="px-6 py-4">Role</th>
-                 <th className="px-6 py-4">KYC</th>
-                 <th className="px-6 py-4">Balance (Est)</th>
-                 <th className="px-6 py-4">Action</th>
+                 <th className="px-6 py-5">Node / User Details</th>
+                 <th className="px-6 py-5">Authorization</th>
+                 <th className="px-6 py-5">Compliance</th>
+                 <th className="px-6 py-5">Portfolio Value</th>
+                 <th className="px-6 py-5 text-right">Operations</th>
                </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
               {users.map((user) => {
-                 // Simple estimation
-                 const estimatedTotal = user.adminDisplayAdjustment?.visible 
-                    ? user.adminDisplayAdjustment.amount 
-                    : (user.balance.btc * 64230 + user.balance.eth * 3450 + user.balance.usdt);
+                 const estimatedTotal = calculateEstimation(user);
 
                  return (
-                  <tr key={user.id} className="hover:bg-slate-700/50 transition-colors">
+                  <tr key={user.id} className="hover:bg-slate-700/30 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white mr-3">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center font-bold text-white mr-3 border border-slate-600 shadow-inner">
                           {user.fullName.charAt(0)}
                         </div>
                         <div>
-                          <div className="font-medium text-white">{user.fullName}</div>
-                          <div className="text-xs text-slate-500">{user.email}</div>
+                          <div className="font-bold text-white group-hover:text-blue-400 transition-colors">{user.fullName}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{user.email}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="bg-blue-900/50 text-blue-400 px-2 py-1 rounded text-xs">{user.role}</span>
+                      <span className="bg-slate-900 text-slate-400 border border-slate-700 px-2 py-1 rounded-md text-[10px] font-black tracking-widest uppercase">
+                        {user.role}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <Badge status={user.kycStatus} />
                     </td>
-                    <td className="px-6 py-4 font-mono">
-                      {user.adminDisplayAdjustment?.visible && <span className="text-indigo-400 mr-2" title="Admin Adjusted">*</span>}
-                      ${estimatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
                     <td className="px-6 py-4">
+                      <div className="flex items-center space-x-1">
+                        {user.adminDisplayAdjustment?.visible && (
+                          <span className="text-indigo-400" title="Admin Adjusted Balance Activated">
+                            <Activity size={12} className="animate-pulse" />
+                          </span>
+                        )}
+                        <span className="font-mono font-bold text-white">
+                          ${estimatedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
                       <button 
                         onClick={() => onSelectUser(user.id)}
-                        className="text-blue-400 hover:text-white font-medium hover:underline"
+                        className="bg-blue-600/10 hover:bg-blue-600 text-blue-400 hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-all border border-blue-500/20"
                       >
-                        Manage
+                        Access Dashboard
                       </button>
                     </td>
                   </tr>
                  );
               })}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-20 text-center text-slate-500 font-bold uppercase tracking-widest text-xs italic opacity-50">
+                    No active nodes found in database.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
-        <div className="bg-slate-900/50 px-6 py-4 border-t border-slate-700 text-xs text-slate-500 flex justify-between">
-          <span>Showing {users.length} users</span>
-          <span>Database Connected: YES</span>
+        <div className="bg-slate-900 px-6 py-4 border-t border-slate-700 text-[10px] text-slate-500 flex justify-between items-center font-bold uppercase tracking-widest">
+          <div className="flex items-center space-x-2">
+            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+            <span>Database Interface: Synchronized</span>
+          </div>
+          <span className="opacity-50">v4.2.1-Node-Secure</span>
         </div>
       </div>
     </div>

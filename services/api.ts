@@ -2,6 +2,7 @@
 import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount } from '../types';
 
 const USERS_STORAGE_KEY = 'abacusx_users_db';
+export const DB_UPDATE_EVENT = 'abacusx_db_updated';
 
 const INITIAL_USERS: User[] = [
   {
@@ -32,11 +33,19 @@ const getStoredUsers = (): User[] => {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
     return INITIAL_USERS;
   }
-  return JSON.parse(stored);
+  try {
+    return JSON.parse(stored);
+  } catch (e) {
+    console.error("Malformed DB found, resetting...");
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
+    return INITIAL_USERS;
+  }
 };
 
 const saveUsers = (users: User[]) => {
   localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+  // Dispatch event for same-tab reactivity
+  window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
 };
 
 // Real-time market state
@@ -85,6 +94,7 @@ export const api = {
   },
 
   getUsers: async (): Promise<User[]> => {
+    // Always fetch fresh from storage
     return getStoredUsers();
   },
 
@@ -104,7 +114,6 @@ export const api = {
     return undefined;
   },
 
-  // Explicitly typing the return value to ensure riskLevel is correctly typed as literal union
   getPlans: async (): Promise<InvestmentPlan[]> => [
     { id: 'p1', name: 'Stable Saver', apr: 5.5, durationDays: 30, minDeposit: 100, riskLevel: 'LOW', description: 'Low risk stablecoin yield farming.' },
     { id: 'p2', name: 'Growth Alpha', apr: 12.0, durationDays: 90, minDeposit: 500, riskLevel: 'MEDIUM', description: 'Balanced crypto basket rebalancing.' },
