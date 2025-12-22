@@ -4,6 +4,9 @@ import { Layout } from './components/Layout';
 import { PublicLayout } from './components/PublicLayout';
 import { User, UserRole } from './types';
 
+// Components
+import { LiveChatWidget } from './components/LiveChatWidget';
+
 // Pages - Authenticated
 import { Dashboard } from './pages/Dashboard';
 import { Wallet } from './pages/Wallet';
@@ -23,14 +26,12 @@ import { SignUp } from './pages/SignUp';
 const SESSION_KEY = 'abacusx_auth_session';
 
 export default function App() {
-  // Initialize user from localStorage if available
   const [user, setUser] = useState<User | null>(() => {
     const savedSession = localStorage.getItem(SESSION_KEY);
     if (savedSession) {
       try {
         return JSON.parse(savedSession);
       } catch (e) {
-        console.error("Failed to parse session", e);
         return null;
       }
     }
@@ -43,9 +44,7 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.slice(1);
-      if (hash) {
-        setPage(hash);
-      }
+      if (hash) setPage(hash);
     };
     if (window.location.hash.slice(1)) handleHashChange();
     else window.location.hash = 'home';
@@ -60,19 +59,13 @@ export default function App() {
 
   const handleLogin = (u: User) => {
     setUser(u);
-    // Persist session to localStorage
     localStorage.setItem(SESSION_KEY, JSON.stringify(u));
-    
-    if (u.role === UserRole.ADMIN) {
-      navigate('admin_dashboard');
-    } else {
-      navigate('dashboard');
-    }
+    if (u.role === UserRole.ADMIN) navigate('admin_dashboard');
+    else navigate('dashboard');
   };
 
   const handleLogout = () => {
     setUser(null);
-    // Clear session from localStorage
     localStorage.removeItem(SESSION_KEY);
     navigate('home');
   };
@@ -97,8 +90,7 @@ export default function App() {
         case 'wallet': return <Wallet user={user} />;
         case 'invest': return <Investments user={user} />;
         case 'kyc': return <KYC user={user} />;
-        case 'admin_dashboard':
-           return <AdminDashboard onNavigate={navigate} />;
+        case 'admin_dashboard': return <AdminDashboard onNavigate={navigate} />;
         case 'admin_users':
           return (
             <AdminUsers 
@@ -113,13 +105,7 @@ export default function App() {
           return adminSelectedUserId ? (
             <AdminUserDetail userId={adminSelectedUserId} onBack={() => navigate('admin_users')} onNavigate={navigate} />
           ) : (
-            <AdminUsers 
-              onNavigate={navigate} 
-              onSelectUser={(userId) => {
-                setAdminSelectedUserId(userId);
-                navigate('admin_user_detail');
-              }} 
-            />
+            <AdminUsers onNavigate={navigate} onSelectUser={(id) => { setAdminSelectedUserId(id); navigate('admin_user_detail'); }} />
           );
         default:
           return <Dashboard user={user} onNavigate={navigate} />;
@@ -136,6 +122,7 @@ export default function App() {
   return (
     <>
       {renderContent()}
+      {user && <LiveChatWidget />}
     </>
   );
 }

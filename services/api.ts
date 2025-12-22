@@ -4,6 +4,9 @@ import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestmen
 const USERS_STORAGE_KEY = 'abacusx_users_db';
 export const DB_UPDATE_EVENT = 'abacusx_db_updated';
 
+// Use BroadcastChannel for robust cross-tab synchronization
+const syncChannel = new BroadcastChannel('abacusx_sync_channel');
+
 const INITIAL_USERS: User[] = [
   {
     id: 'u1',
@@ -30,42 +33,44 @@ const INITIAL_USERS: User[] = [
 const getStoredUsers = (): User[] => {
   const stored = localStorage.getItem(USERS_STORAGE_KEY);
   if (!stored) {
-    console.log("Initializing database with default users.");
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
-    return [...INITIAL_USERS]; // Return copy
+    return [...INITIAL_USERS];
   }
   try {
     const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) {
-       throw new Error("Stored data is not an array");
-    }
+    if (!Array.isArray(parsed)) throw new Error("Format error");
     return parsed;
   } catch (e) {
-    console.error("Malformed DB found, resetting...", e);
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(INITIAL_USERS));
-    return [...INITIAL_USERS]; // Return copy
+    return [...INITIAL_USERS];
   }
 };
 
 const saveUsers = (users: User[]) => {
   try {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
-    // Dispatch event for same-tab reactivity
+    // Signal update to current tab
     window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
-    console.log(`Database updated. Count: ${users.length}`);
+    // Signal update to all other tabs
+    syncChannel.postMessage({ type: 'DB_UPDATED' });
   } catch (e) {
-    console.error("Failed to save to localStorage", e);
+    console.error("Critical: Storage Write Failed", e);
   }
 };
 
-// Real-time market state
+// Listen for sync messages from other tabs
+syncChannel.onmessage = (event) => {
+  if (event.data.type === 'DB_UPDATED') {
+    window.dispatchEvent(new CustomEvent(DB_UPDATE_EVENT));
+  }
+};
+
 let currentPrices = {
   btc: 64230.12,
   eth: 3450.45,
   sol: 145.20
 };
 
-// Update prices periodically to simulate a live market
 setInterval(() => {
   currentPrices.btc += (Math.random() - 0.5) * 20;
   currentPrices.eth += (Math.random() - 0.5) * 5;
@@ -98,19 +103,15 @@ export const api = {
       twoFactorEnabled: false,
       joinedAt: new Date().toISOString()
     };
-    users.push(newUser);
-    saveUsers(users);
+    const updatedList = [...users, newUser];
+    saveUsers(updatedList);
     return newUser;
   },
 
-  getUsers: async (): Promise<User[]> => {
-    // Always fetch fresh from storage
-    return getStoredUsers();
-  },
+  getUsers: async (): Promise<User[]> => getStoredUsers(),
 
   getUser: async (id: string): Promise<User | undefined> => {
-    const users = getStoredUsers();
-    return users.find(u => u.id === id);
+    return getStoredUsers().find(u => u.id === id);
   },
 
   updateUserDisplayAmount: async (userId: string, data: AdminDisplayAmount) => {
