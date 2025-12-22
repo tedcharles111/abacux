@@ -15,14 +15,23 @@ export interface SupportTicket {
   lastTimestamp: string;
   status: 'OPEN' | 'CLOSED';
   messages: ChatMessage[];
-  unreadCount: number;
+  unreadCount: number; // For Admin
+  userUnreadCount: number; // For User
 }
 
-const STORAGE_KEY = 'abacusx_support_ledger_v5';
-const SYNC_CHANNEL = 'abacusx_support_sync_v5';
+const STORAGE_KEY = 'abacusx_support_v6';
+const SYNC_CHANNEL = 'abacusx_sync_v6';
 
-// Native browser broadcast for instant multi-tab sync
+// Event names
+const UPDATE_EVENT = 'abacusx_support_update';
+
+// BroadcastChannel for cross-tab sync
 const bc = new BroadcastChannel(SYNC_CHANNEL);
+bc.onmessage = (event) => {
+  if (event.data === 'REFRESH') {
+    window.dispatchEvent(new CustomEvent(UPDATE_EVENT));
+  }
+};
 
 const getLedger = (): Record<string, SupportTicket> => {
   try {
@@ -35,14 +44,10 @@ const getLedger = (): Record<string, SupportTicket> => {
 
 const saveLedger = (db: Record<string, SupportTicket>) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-  // Signal ALL listeners (Current tab and other tabs)
+  // Notify current tab
+  window.dispatchEvent(new CustomEvent(UPDATE_EVENT));
+  // Notify other tabs
   bc.postMessage('REFRESH');
-  window.dispatchEvent(new Event('storage_sync'));
-};
-
-// Listen for signals from other tabs
-bc.onmessage = () => {
-  window.dispatchEvent(new Event('storage_sync'));
 };
 
 export const supportService = {
@@ -69,13 +74,14 @@ export const supportService = {
         lastTimestamp: '',
         status: 'OPEN',
         messages: [],
-        unreadCount: 0
+        unreadCount: 0,
+        userUnreadCount: 0
       };
     }
 
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      senderId: isFromUser ? userId : 'admin',
+      senderId: isFromUser ? userId : 'admin_support',
       senderName: isFromUser ? userName : 'AbacusX Support',
       text,
       timestamp: new Date().toISOString(),
@@ -86,32 +92,39 @@ export const supportService = {
     db[userId].lastMessage = text;
     db[userId].lastTimestamp = newMessage.timestamp;
     
-    // Increment unread for admin if sent by user
     if (isFromUser) {
       db[userId].unreadCount += 1;
+    } else {
+      db[userId].userUnreadCount += 1;
     }
 
     saveLedger(db);
     return newMessage;
   },
 
-  markAsRead: (userId: string) => {
+  markAsRead: (userId: string, isAdmin: boolean) => {
     const db = getLedger();
     if (db[userId]) {
-      db[userId].unreadCount = 0;
+      if (isAdmin) {
+        db[userId].unreadCount = 0;
+      } else {
+        db[userId].userUnreadCount = 0;
+      }
       saveLedger(db);
     }
   },
 
   subscribe: (callback: () => void) => {
-    window.addEventListener('storage_sync', callback);
-    // Also listen to raw storage events
-    window.addEventListener('storage', (e) => {
+    window.addEventListener(UPDATE_EVENT, callback);
+    // Storage event for changes from other windows/tabs (legacy support alongside BC)
+    const storageHandler = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) callback();
-    });
+    };
+    window.addEventListener('storage', storageHandler);
+    
     return () => {
-      window.removeEventListener('storage_sync', callback);
-      window.removeEventListener('storage', callback);
+      window.removeEventListener(UPDATE_EVENT, callback);
+      window.removeEventListener('storage', storageHandler);
     };
   }
 };

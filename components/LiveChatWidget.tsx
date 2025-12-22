@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Send, Minus, Headset, Wifi, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { X, Send, Minus, Headset, Wifi, ShieldCheck, Bell } from 'lucide-react';
 import { supportService, ChatMessage } from '../services/support';
 import { User as UserType } from '../types';
 
 export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [ticketState, setTicketState] = useState(supportService.getTicket(user?.id || 'guest_user'));
   const [inputValue, setInputValue] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -14,10 +14,8 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
   const userName = user?.fullName || 'Guest User';
 
   const refresh = () => {
-    const ticket = supportService.getTicket(userId);
-    if (ticket) {
-      setMessages([...ticket.messages]);
-    }
+    const currentTicket = supportService.getTicket(userId);
+    setTicketState(currentTicket);
   };
 
   useEffect(() => {
@@ -36,8 +34,11 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (ticketState && ticketState.userUnreadCount > 0) {
+        supportService.markAsRead(userId, false);
+      }
     }
-  }, [messages, isOpen]);
+  }, [ticketState?.messages, isOpen]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +47,9 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
     supportService.sendMessage(userId, userName, inputValue.trim(), true);
     setInputValue('');
   };
+
+  const messages = useMemo(() => ticketState?.messages || [], [ticketState]);
+  const hasUnread = (ticketState?.userUnreadCount || 0) > 0;
 
   return (
     <div className="fixed bottom-6 right-6 z-[9999] pointer-events-none">
@@ -79,6 +83,7 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-30 p-10">
               <ShieldCheck size={48} className="text-slate-500" />
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Secure Peer-to-Peer Line Established</p>
+              <p className="text-xs text-slate-500 normal-case">Send a message to start chatting with an expert.</p>
             </div>
           )}
           
@@ -91,7 +96,7 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
               }`}>
                 {!msg.isFromUser && (
                   <span className="text-[8px] uppercase font-black text-blue-400 block mb-1 tracking-widest">
-                    Support Agent
+                    AbacusX Specialist
                   </span>
                 )}
                 <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
@@ -111,7 +116,7 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Send a message..."
+              placeholder="How can we help today?"
               className="flex-1 bg-slate-950 text-white rounded-2xl px-5 py-3.5 border border-slate-700 focus:border-blue-500 text-sm outline-none transition-all"
             />
             <button 
@@ -133,6 +138,11 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
         }`}
       >
         {isOpen ? <X size={28} className="text-white" /> : <Headset size={28} className="text-white" />}
+        {!isOpen && hasUnread && (
+          <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 border-2 border-slate-900 rounded-full flex items-center justify-center animate-bounce">
+            <Bell size={12} className="text-white fill-white" />
+          </div>
+        )}
       </button>
     </div>
   );

@@ -1,17 +1,16 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supportService, SupportTicket } from '../../services/support';
 import { Button } from '../../components/ui';
 import { Send, Search, User as UserIcon, MessageSquare, Wifi, RefreshCw } from 'lucide-react';
 
 export const AdminSupport: React.FC = () => {
-  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [tickets, setTickets] = useState<SupportTicket[]>(supportService.getTickets());
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [pulse, setPulse] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Core Refresh logic
   const sync = () => {
     const data = supportService.getTickets();
     setTickets(data);
@@ -20,34 +19,32 @@ export const AdminSupport: React.FC = () => {
   };
 
   useEffect(() => {
-    sync();
-    // Subscribe to BroadcastChannel and Storage signals
     const unsubscribe = supportService.subscribe(sync);
-    
-    // Safety fallback: Poll every 1 second
-    const poller = setInterval(sync, 1000);
-
-    return () => {
-      unsubscribe();
-      clearInterval(poller);
-    };
+    // Initial sync
+    sync();
+    return () => unsubscribe();
   }, []);
 
-  // Ensure the message list scrolls down when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Deriving current ticket ensures we always have the freshest data from the tickets list
+  const currentTicket = useMemo(() => {
+    return selectedUserId ? tickets.find(t => t.userId === selectedUserId) : null;
   }, [tickets, selectedUserId]);
 
-  // DERIVE selected ticket from the fresh tickets list to avoid stale closure issues
-  const currentTicket = selectedUserId ? tickets.find(t => t.userId === selectedUserId) : null;
+  useEffect(() => {
+    if (currentTicket) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (currentTicket.unreadCount > 0) {
+        supportService.markAsRead(currentTicket.userId, true);
+      }
+    }
+  }, [currentTicket?.messages?.length, selectedUserId]);
 
   const handleSendReply = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUserId || !replyText.trim()) return;
 
-    supportService.sendMessage(selectedUserId, 'Priority Agent', replyText, false);
+    supportService.sendMessage(selectedUserId, 'Systems Support', replyText.trim(), false);
     setReplyText('');
-    sync(); // Immediate re-sync
   };
 
   return (
@@ -68,7 +65,7 @@ export const AdminSupport: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
             <input 
               type="text" 
-              placeholder="Search users..." 
+              placeholder="Search user ID or name..." 
               className="w-full bg-slate-950 border border-slate-700 rounded-2xl pl-10 pr-4 py-3 text-xs text-white focus:border-blue-500 outline-none"
             />
           </div>
@@ -86,8 +83,9 @@ export const AdminSupport: React.FC = () => {
                 key={ticket.userId}
                 onClick={() => {
                   setSelectedUserId(ticket.userId);
-                  supportService.markAsRead(ticket.userId);
-                  sync();
+                  if (ticket.unreadCount > 0) {
+                    supportService.markAsRead(ticket.userId, true);
+                  }
                 }}
                 className={`w-full p-6 flex items-start space-x-4 transition-all border-b border-slate-800/50 text-left relative ${
                   selectedUserId === ticket.userId ? 'bg-blue-600/10 border-r-4 border-blue-500' : 'hover:bg-slate-800/30'
@@ -104,7 +102,7 @@ export const AdminSupport: React.FC = () => {
                     </span>
                   </div>
                   <p className={`text-[11px] truncate leading-relaxed ${ticket.unreadCount > 0 ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
-                    {ticket.lastMessage}
+                    {ticket.lastMessage || 'Starting conversation...'}
                   </p>
                 </div>
                 {ticket.unreadCount > 0 && (
@@ -131,7 +129,7 @@ export const AdminSupport: React.FC = () => {
                   <h3 className="text-white font-black text-lg">{currentTicket.userName}</h3>
                   <div className="flex items-center space-x-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                    <span className="text-[9px] text-slate-400 font-black uppercase">Live Session: {currentTicket.userId}</span>
+                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Active Connection / {currentTicket.userId}</span>
                   </div>
                 </div>
               </div>
@@ -147,7 +145,7 @@ export const AdminSupport: React.FC = () => {
                   }`}>
                     {!msg.isFromUser && (
                       <div className="text-[8px] uppercase font-black text-blue-200 mb-2 tracking-widest opacity-60">
-                        Authorized Support
+                        Official Response
                       </div>
                     )}
                     <p className="text-sm leading-relaxed font-medium whitespace-pre-wrap">{msg.text}</p>
@@ -166,7 +164,7 @@ export const AdminSupport: React.FC = () => {
                   type="text" 
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Type a reply to ${currentTicket.userName}...`}
+                  placeholder={`Send direct reply to ${currentTicket.userName}...`}
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 outline-none transition-all"
                 />
                 <button 
@@ -174,7 +172,7 @@ export const AdminSupport: React.FC = () => {
                   disabled={!replyText.trim()}
                   className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black flex items-center shadow-xl active:scale-95 disabled:opacity-50 transition-all uppercase tracking-widest text-xs"
                 >
-                  <Send size={16} className="mr-3" /> Send
+                  <Send size={16} className="mr-3" /> Transmit
                 </button>
               </form>
             </div>
@@ -184,8 +182,8 @@ export const AdminSupport: React.FC = () => {
              <div className="w-32 h-32 bg-slate-900 rounded-[2.5rem] flex items-center justify-center border border-slate-800 mb-8 shadow-2xl opacity-50">
                 <MessageSquare size={54} className="text-slate-800" />
              </div>
-             <h2 className="text-2xl font-black text-slate-400 mb-4 uppercase">No Conversation Selected</h2>
-             <p className="text-slate-600 max-w-xs text-sm">Select a user from the inbox to begin a real-time support session.</p>
+             <h2 className="text-2xl font-black text-slate-400 mb-4 uppercase">Selection Required</h2>
+             <p className="text-slate-600 max-w-xs text-sm">Select an active support session from the inbox to begin responding.</p>
           </div>
         )}
       </div>
