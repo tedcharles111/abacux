@@ -56,7 +56,8 @@ export const LiveChatWidget: React.FC = () => {
               for (const fc of msg.toolCall.functionCalls) {
                 if (fc.name === 'queryNodeStatus') {
                   const users = await api.getUsers();
-                  const found = users.find(u => u.email.toLowerCase() === (fc.args as any).email.toLowerCase());
+                  const args = fc.args as { email?: string };
+                  const found = users.find(u => u.email.toLowerCase() === (args?.email || '').toLowerCase());
                   const result = found ? `User ${found.fullName} found. KYC Status: ${found.kycStatus}.` : 'No node found with that identifier.';
                   sessionPromise.then(s => s.sendToolResponse({
                     functionResponses: { id: fc.id, name: fc.name, response: { result } }
@@ -65,13 +66,13 @@ export const LiveChatWidget: React.FC = () => {
               }
             }
 
-            if (msg.serverContent?.outputTranscription) {
+            if (msg.serverContent?.outputTranscription?.text) {
               setTranscription(prev => prev + msg.serverContent!.outputTranscription!.text);
             }
             if (msg.serverContent?.turnComplete) {
               setTranscription('');
             }
-            const base64Audio = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            const base64Audio = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
               const ctx = outputAudioContextRef.current;
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
