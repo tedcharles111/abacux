@@ -22,8 +22,8 @@ export interface SupportTicket {
   userUnreadCount: number;
 }
 
-const STORAGE_KEY = 'abacusx_support_v8';
-const SYNC_CHANNEL = 'abacusx_sync_v8';
+const STORAGE_KEY = 'abacusx_support_v9';
+const SYNC_CHANNEL = 'abacusx_sync_v9';
 const UPDATE_EVENT = 'abacusx_support_update';
 const MESSAGE_EVENT = 'abacusx_new_message';
 const TYPING_EVENT = 'abacusx_typing_update';
@@ -42,15 +42,15 @@ const getLedger = (): Record<string, SupportTicket> => {
 const saveLedger = (db: Record<string, SupportTicket>, lastMessage?: ChatMessage) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   
-  // BROADCAST 1: General Refresh
+  // Dispatch local events
   window.dispatchEvent(new CustomEvent(UPDATE_EVENT));
-  bc.postMessage({ type: 'REFRESH' });
-
-  // BROADCAST 2: Specific Message Payload (Direct Pipe)
+  
   if (lastMessage) {
-    const detail = { message: lastMessage, userId: lastMessage.isFromUser ? lastMessage.senderId : 'admin' };
-    window.dispatchEvent(new CustomEvent(MESSAGE_EVENT, { detail }));
-    bc.postMessage({ type: 'NEW_MESSAGE', ...detail });
+    const payload = { message: lastMessage, userId: lastMessage.isFromUser ? lastMessage.senderId : 'admin' };
+    window.dispatchEvent(new CustomEvent(MESSAGE_EVENT, { detail: payload }));
+    bc.postMessage({ type: 'NEW_MESSAGE', ...payload });
+  } else {
+    bc.postMessage({ type: 'REFRESH' });
   }
 };
 
@@ -107,17 +107,30 @@ export const supportService = {
   getAIResponse: async (userId: string, userName: string, userMessage: string) => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const ticket = supportService.getTicket(userId);
-    const history = ticket?.messages.slice(-5).map(m => `${m.senderName}: ${m.text}`).join('\n') || '';
+    const historyText = ticket?.messages.slice(-6).map(m => `${m.senderName}: ${m.text}`).join('\n') || 'None';
 
     try {
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `You are the AbacusX AI Agent. User: ${userName}. Message: "${userMessage}". History: ${history}. Be concise and professional.`,
+        contents: `The user ${userName} said: "${userMessage}". Respond as a helpful crypto support agent.`,
+        config: {
+          systemInstruction: `You are the AbacusX AI Support Specialist. 
+          AbacusX is a premium crypto investment platform. 
+          Your goals: 
+          1. Be professional and concise. 
+          2. Assist with wallet, investment, or KYC questions. 
+          3. If the user seems frustrated, tell them a human specialist is monitoring this channel.
+          Context History: ${historyText}`,
+          temperature: 0.7,
+        }
       });
-      const aiText = response.text || "A specialist is connecting now.";
+      
+      const aiText = response.text || "I've logged your request. A specialist will be with you shortly.";
       supportService.sendMessage(userId, userName, aiText, false, true);
     } catch (e) {
-      supportService.sendMessage(userId, userName, "Connection busy. Please wait.", false, true);
+      console.error("Gemini Error:", e);
+      // More helpful fallback for dev/demo purposes
+      supportService.sendMessage(userId, userName, "Our AI specialist is currently updating. Please stand by for a human representative.", false, true);
     }
   },
 
@@ -130,17 +143,22 @@ export const supportService = {
     }
   },
 
-  // HIGH-SPEED SUBSCRIPTIONS
   subscribeToAll: (callback: () => void) => {
     window.addEventListener(UPDATE_EVENT, callback);
-    bc.addEventListener('message', (e) => { if (e.data.type === 'REFRESH') callback(); });
-    return () => window.removeEventListener(UPDATE_EVENT, callback);
+    const bcHandler = (e: any) => { if (e.data.type === 'REFRESH') callback(); };
+    bc.addEventListener('message', bcHandler);
+    return () => {
+      window.removeEventListener(UPDATE_EVENT, callback);
+      bc.removeEventListener('message', bcHandler);
+    };
   },
 
   subscribeToMessages: (callback: (payload: { message: ChatMessage, userId: string }) => void) => {
     const handler = (e: any) => callback(e.detail);
     window.addEventListener(MESSAGE_EVENT, handler);
-    const bcHandler = (e: any) => { if (e.data.type === 'NEW_MESSAGE') callback({ message: e.data.message, userId: e.data.userId }); };
+    const bcHandler = (e: any) => { 
+      if (e.data.type === 'NEW_MESSAGE') callback({ message: e.data.message, userId: e.data.userId }); 
+    };
     bc.addEventListener('message', bcHandler);
     return () => {
       window.removeEventListener(MESSAGE_EVENT, handler);
