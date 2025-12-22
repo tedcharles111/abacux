@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Send, Minus, Headset, Wifi, ShieldCheck, Bell } from 'lucide-react';
+import { X, Send, Minus, Headset, Wifi, ShieldCheck, Bell, Loader2 } from 'lucide-react';
 import { supportService, ChatMessage } from '../services/support';
 import { User as UserType } from '../types';
 
@@ -8,6 +8,7 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
   const [isOpen, setIsOpen] = useState(false);
   const [ticketState, setTicketState] = useState(supportService.getTicket(user?.id || 'guest_user'));
   const [inputValue, setInputValue] = useState('');
+  const [isSupportTyping, setIsSupportTyping] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const userId = user?.id || 'guest_user';
@@ -20,13 +21,19 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
 
   useEffect(() => {
     refresh();
-    const unsubscribe = supportService.subscribe(refresh);
+    const unsubUpdate = supportService.subscribe(refresh);
+    const unsubTyping = supportService.subscribeToTyping((tid, isTyping) => {
+      if (tid === 'admin' || tid === 'ai_support') {
+        setIsSupportTyping(isTyping);
+      }
+    });
     
     const handleOpen = () => setIsOpen(true);
     window.addEventListener('open-live-chat', handleOpen);
     
     return () => {
-      unsubscribe();
+      unsubUpdate();
+      unsubTyping();
       window.removeEventListener('open-live-chat', handleOpen);
     };
   }, [userId]);
@@ -38,14 +45,26 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
         supportService.markAsRead(userId, false);
       }
     }
-  }, [ticketState?.messages, isOpen]);
+  }, [ticketState?.messages, isOpen, isSupportTyping]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
     
-    supportService.sendMessage(userId, userName, inputValue.trim(), true);
+    const userMsg = inputValue.trim();
+    supportService.sendMessage(userId, userName, userMsg, true);
     setInputValue('');
+
+    // Simulate AI response if no admin is active
+    // We signal typing first
+    supportService.setTyping('ai_support', true);
+    
+    // Trigger AI response after a short delay to feel natural
+    setTimeout(() => {
+      supportService.getAIResponse(userId, userName, userMsg).finally(() => {
+        supportService.setTyping('ai_support', false);
+      });
+    }, 1500);
   };
 
   const messages = useMemo(() => ticketState?.messages || [], [ticketState]);
@@ -68,7 +87,7 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
             <div>
               <h3 className="font-bold text-white text-sm">AbacusX Support</h3>
               <div className="flex items-center text-[9px] text-green-400 font-bold uppercase tracking-widest">
-                <Wifi size={10} className="mr-1 animate-pulse" /> Direct Connection
+                <Wifi size={10} className="mr-1 animate-pulse" /> Live Connection
               </div>
             </div>
           </div>
@@ -82,13 +101,13 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-30 p-10">
               <ShieldCheck size={48} className="text-slate-500" />
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Secure Peer-to-Peer Line Established</p>
-              <p className="text-xs text-slate-500 normal-case">Send a message to start chatting with an expert.</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Secure Protocol Active</p>
+              <p className="text-xs text-slate-500 normal-case">How can we assist you today?</p>
             </div>
           )}
           
           {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.isFromUser ? 'justify-end' : 'justify-start'}`}>
+            <div key={msg.id} className={`flex ${msg.isFromUser ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
               <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm transition-all ${
                 msg.isFromUser 
                   ? 'bg-blue-600 text-white rounded-br-none' 
@@ -96,7 +115,7 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
               }`}>
                 {!msg.isFromUser && (
                   <span className="text-[8px] uppercase font-black text-blue-400 block mb-1 tracking-widest">
-                    AbacusX Specialist
+                    {msg.isAI ? 'AbacusX AI' : 'AbacusX Specialist'}
                   </span>
                 )}
                 <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
@@ -106,6 +125,19 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
               </div>
             </div>
           ))}
+
+          {isSupportTyping && (
+            <div className="flex justify-start animate-in fade-in duration-300">
+               <div className="bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-none px-4 py-3 flex items-center space-x-2">
+                  <span className="text-[8px] uppercase font-black text-blue-400 tracking-widest">Specialist is typing</span>
+                  <div className="flex space-x-1">
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+               </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -116,7 +148,7 @@ export const LiveChatWidget: React.FC<{ user: UserType | null }> = ({ user }) =>
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              placeholder="How can we help today?"
+              placeholder="Ask anything..."
               className="flex-1 bg-slate-950 text-white rounded-2xl px-5 py-3.5 border border-slate-700 focus:border-blue-500 text-sm outline-none transition-all"
             />
             <button 

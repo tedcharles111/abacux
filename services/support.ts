@@ -1,4 +1,6 @@
 
+import { GoogleGenAI } from "@google/genai";
+
 export interface ChatMessage {
   id: string;
   senderId: string;
@@ -6,6 +8,7 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   isFromUser: boolean;
+  isAI?: boolean;
 }
 
 export interface SupportTicket {
@@ -15,23 +18,16 @@ export interface SupportTicket {
   lastTimestamp: string;
   status: 'OPEN' | 'CLOSED';
   messages: ChatMessage[];
-  unreadCount: number; // For Admin
-  userUnreadCount: number; // For User
+  unreadCount: number; 
+  userUnreadCount: number;
 }
 
-const STORAGE_KEY = 'abacusx_support_v6';
-const SYNC_CHANNEL = 'abacusx_sync_v6';
-
-// Event names
+const STORAGE_KEY = 'abacusx_support_v7';
+const SYNC_CHANNEL = 'abacusx_sync_v7';
 const UPDATE_EVENT = 'abacusx_support_update';
+const TYPING_EVENT = 'abacusx_typing_update';
 
-// BroadcastChannel for cross-tab sync
 const bc = new BroadcastChannel(SYNC_CHANNEL);
-bc.onmessage = (event) => {
-  if (event.data === 'REFRESH') {
-    window.dispatchEvent(new CustomEvent(UPDATE_EVENT));
-  }
-};
 
 const getLedger = (): Record<string, SupportTicket> => {
   try {
@@ -44,10 +40,8 @@ const getLedger = (): Record<string, SupportTicket> => {
 
 const saveLedger = (db: Record<string, SupportTicket>) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-  // Notify current tab
   window.dispatchEvent(new CustomEvent(UPDATE_EVENT));
-  // Notify other tabs
-  bc.postMessage('REFRESH');
+  bc.postMessage({ type: 'REFRESH' });
 };
 
 export const supportService = {
@@ -63,7 +57,12 @@ export const supportService = {
     return db[userId] || null;
   },
 
-  sendMessage: (userId: string, userName: string, text: string, isFromUser: boolean) => {
+  setTyping: (userId: string, isTyping: boolean) => {
+    bc.postMessage({ type: 'TYPING', userId, isTyping });
+    window.dispatchEvent(new CustomEvent(TYPING_EVENT, { detail: { userId, isTyping } }));
+  },
+
+  sendMessage: (userId: string, userName: string, text: string, isFromUser: boolean, isAI: boolean = false) => {
     const db = getLedger();
     
     if (!db[userId]) {
@@ -81,11 +80,12 @@ export const supportService = {
 
     const newMessage: ChatMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      senderId: isFromUser ? userId : 'admin_support',
-      senderName: isFromUser ? userName : 'AbacusX Support',
+      senderId: isFromUser ? userId : (isAI ? 'ai_support' : 'admin_support'),
+      senderName: isFromUser ? userName : (isAI ? 'AbacusX AI' : 'AbacusX Support'),
       text,
       timestamp: new Date().toISOString(),
-      isFromUser
+      isFromUser,
+      isAI
     };
 
     db[userId].messages.push(newMessage);
@@ -102,29 +102,63 @@ export const supportService = {
     return newMessage;
   },
 
+  // Get automated response from Gemini
+  getAIResponse: async (userId: string, userName: string, userMessage: string) => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ticket = supportService.getTicket(userId);
+    const history = ticket?.messages.slice(-5).map(m => 
+      `${m.senderName}: ${m.text}`
+    ).join('\n') || '';
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: `You are the AbacusX Customer Support AI. You are helping ${userName}. 
+        AbacusX is a secure crypto platform. 
+        Current User Context: ${userName} is asking: "${userMessage}".
+        Previous History: ${history}
+        
+        Keep your response helpful, concise (under 3 sentences), and professional. 
+        If asked about technical issues, tell them a human specialist is being notified.`,
+      });
+
+      const aiText = response.text || "I'm having trouble connecting to my knowledge base, but a specialist will be with you shortly.";
+      supportService.sendMessage(userId, userName, aiText, false, true);
+    } catch (e) {
+      console.error("AI Response failed", e);
+      supportService.sendMessage(userId, userName, "Our support systems are high load. Please wait for a human agent.", false, true);
+    }
+  },
+
   markAsRead: (userId: string, isAdmin: boolean) => {
     const db = getLedger();
     if (db[userId]) {
-      if (isAdmin) {
-        db[userId].unreadCount = 0;
-      } else {
-        db[userId].userUnreadCount = 0;
-      }
+      if (isAdmin) db[userId].unreadCount = 0;
+      else db[userId].userUnreadCount = 0;
       saveLedger(db);
     }
   },
 
   subscribe: (callback: () => void) => {
-    window.addEventListener(UPDATE_EVENT, callback);
-    // Storage event for changes from other windows/tabs (legacy support alongside BC)
-    const storageHandler = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) callback();
+    const handler = () => callback();
+    window.addEventListener(UPDATE_EVENT, handler);
+    bc.onmessage = (e) => {
+      if (e.data.type === 'REFRESH') handler();
     };
-    window.addEventListener('storage', storageHandler);
+    return () => window.removeEventListener(UPDATE_EVENT, handler);
+  },
+
+  subscribeToTyping: (callback: (userId: string, isTyping: boolean) => void) => {
+    const handler = (e: any) => callback(e.detail.userId, e.detail.isTyping);
+    window.addEventListener(TYPING_EVENT, handler);
+    const bcHandler = (e: any) => {
+      if (e.data.type === 'TYPING') callback(e.data.userId, e.data.isTyping);
+    };
+    bc.addEventListener('message', bcHandler);
     
     return () => {
-      window.removeEventListener(UPDATE_EVENT, callback);
-      window.removeEventListener('storage', storageHandler);
+      window.removeEventListener(TYPING_EVENT, handler);
+      bc.removeEventListener('message', bcHandler);
     };
   }
 };

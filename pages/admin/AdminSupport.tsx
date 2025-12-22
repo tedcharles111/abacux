@@ -20,12 +20,10 @@ export const AdminSupport: React.FC = () => {
 
   useEffect(() => {
     const unsubscribe = supportService.subscribe(sync);
-    // Initial sync
     sync();
     return () => unsubscribe();
   }, []);
 
-  // Deriving current ticket ensures we always have the freshest data from the tickets list
   const currentTicket = useMemo(() => {
     return selectedUserId ? tickets.find(t => t.userId === selectedUserId) : null;
   }, [tickets, selectedUserId]);
@@ -45,6 +43,14 @@ export const AdminSupport: React.FC = () => {
 
     supportService.sendMessage(selectedUserId, 'Systems Support', replyText.trim(), false);
     setReplyText('');
+    supportService.setTyping('admin', false);
+  };
+
+  const onInputChange = (val: string) => {
+    setReplyText(val);
+    if (selectedUserId) {
+      supportService.setTyping('admin', val.length > 0);
+    }
   };
 
   return (
@@ -65,7 +71,7 @@ export const AdminSupport: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
             <input 
               type="text" 
-              placeholder="Search user ID or name..." 
+              placeholder="Search conversations..." 
               className="w-full bg-slate-950 border border-slate-700 rounded-2xl pl-10 pr-4 py-3 text-xs text-white focus:border-blue-500 outline-none"
             />
           </div>
@@ -75,7 +81,7 @@ export const AdminSupport: React.FC = () => {
           {tickets.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full p-10 text-center opacity-20">
               <Wifi size={48} className="mb-4" />
-              <p className="text-[10px] font-black uppercase tracking-[0.3em]">No Active Signals</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em]">No Connections</p>
             </div>
           ) : (
             tickets.map(ticket => (
@@ -102,7 +108,7 @@ export const AdminSupport: React.FC = () => {
                     </span>
                   </div>
                   <p className={`text-[11px] truncate leading-relaxed ${ticket.unreadCount > 0 ? 'text-blue-400 font-bold' : 'text-slate-400'}`}>
-                    {ticket.lastMessage || 'Starting conversation...'}
+                    {ticket.lastMessage || 'New session...'}
                   </p>
                 </div>
                 {ticket.unreadCount > 0 && (
@@ -128,8 +134,8 @@ export const AdminSupport: React.FC = () => {
                 <div>
                   <h3 className="text-white font-black text-lg">{currentTicket.userName}</h3>
                   <div className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Active Connection / {currentTicket.userId}</span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-widest">Connected Gateway / {currentTicket.userId}</span>
                   </div>
                 </div>
               </div>
@@ -141,11 +147,11 @@ export const AdminSupport: React.FC = () => {
                   <div className={`max-w-[75%] rounded-[1.5rem] p-5 shadow-2xl transition-all ${
                     msg.isFromUser 
                       ? 'bg-slate-800 text-slate-100 border border-slate-700 rounded-bl-none' 
-                      : 'bg-blue-600 text-white border border-blue-400/20 rounded-br-none'
+                      : (msg.isAI ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-100 rounded-br-none' : 'bg-blue-600 text-white border border-blue-400/20 rounded-br-none')
                   }`}>
                     {!msg.isFromUser && (
-                      <div className="text-[8px] uppercase font-black text-blue-200 mb-2 tracking-widest opacity-60">
-                        Official Response
+                      <div className="text-[8px] uppercase font-black mb-2 tracking-widest opacity-60">
+                        {msg.isAI ? 'Automated Response' : 'Admin Transmission'}
                       </div>
                     )}
                     <p className="text-sm leading-relaxed font-medium whitespace-pre-wrap">{msg.text}</p>
@@ -163,8 +169,8 @@ export const AdminSupport: React.FC = () => {
                 <input 
                   type="text" 
                   value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder={`Send direct reply to ${currentTicket.userName}...`}
+                  onChange={(e) => onInputChange(e.target.value)}
+                  placeholder={`Type response to ${currentTicket.userName}...`}
                   className="flex-1 bg-slate-950 border border-slate-700 rounded-2xl px-6 py-4 text-sm text-white focus:border-blue-500 outline-none transition-all"
                 />
                 <button 
@@ -172,7 +178,7 @@ export const AdminSupport: React.FC = () => {
                   disabled={!replyText.trim()}
                   className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black flex items-center shadow-xl active:scale-95 disabled:opacity-50 transition-all uppercase tracking-widest text-xs"
                 >
-                  <Send size={16} className="mr-3" /> Transmit
+                  <Send size={16} className="mr-3" /> Send
                 </button>
               </form>
             </div>
@@ -182,8 +188,8 @@ export const AdminSupport: React.FC = () => {
              <div className="w-32 h-32 bg-slate-900 rounded-[2.5rem] flex items-center justify-center border border-slate-800 mb-8 shadow-2xl opacity-50">
                 <MessageSquare size={54} className="text-slate-800" />
              </div>
-             <h2 className="text-2xl font-black text-slate-400 mb-4 uppercase">Selection Required</h2>
-             <p className="text-slate-600 max-w-xs text-sm">Select an active support session from the inbox to begin responding.</p>
+             <h2 className="text-2xl font-black text-slate-400 mb-4 uppercase">Select a Channel</h2>
+             <p className="text-slate-600 max-w-xs text-sm">Waiting for incoming secure support requests from the user network.</p>
           </div>
         )}
       </div>
