@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
-import { MessageCircle, X, Mic, Send, Headset, ShieldCheck, Lock, Terminal } from 'lucide-react';
+import { X, Mic, Headset, ShieldCheck, Terminal } from 'lucide-react';
 import { Button } from './ui';
 import { api } from '../services/api';
 import { UserRole, User } from '../types';
@@ -74,13 +74,12 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
           onmessage: async (msg: LiveServerMessage) => {
             if (msg.toolCall?.functionCalls) {
               for (const fc of msg.toolCall.functionCalls) {
-                // SECURITY CHECK: All tools require Admin role
                 if (currentUser?.role !== UserRole.ADMIN) {
                   sessionPromise.then(s => s.sendToolResponse({
                     functionResponses: { 
                       id: fc.id, 
                       name: fc.name, 
-                      response: { result: 'ERROR: ACCESS_DENIED. This operation requires Institutional Security Clearance.' } 
+                      response: { result: 'ERROR: ACCESS_DENIED. Clearance required.' } 
                     }
                   }));
                   continue;
@@ -128,12 +127,7 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
         config: {
           responseModalities: [Modality.AUDIO],
           tools: [{ functionDeclarations: [queryNodeStatus, getSystemTelemetry] }],
-          systemInstruction: `You are the AbacusX AI Support Terminal. 
-          Your role is to assist Institutional Admins with node management and system telemetry.
-          USER ROLE: ${currentUser?.role || 'UNAUTHENTICATED'}.
-          If an ADMIN asks about system health or recent events, use getSystemTelemetry.
-          If a user asks about nodes, use queryNodeStatus.
-          ALWAYS refuse sensitive data if the user is not an ADMIN.`,
+          systemInstruction: `You are the AbacusX AI Support Terminal. Assistance mode active.`,
           outputAudioTranscription: {}
         }
       });
@@ -188,14 +182,14 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
           </div>
           <div className="h-96 p-4 overflow-y-auto space-y-4 bg-slate-950 font-mono text-[11px] leading-relaxed">
             <div className="text-blue-500 opacity-50 flex items-center">
-              <ShieldCheck size={12} className="mr-2" /> SESSION ENCRYPTED (AES-256)
+              <ShieldCheck size={12} className="mr-2" /> SESSION ENCRYPTED
             </div>
             {isActive && <div className="text-green-500 animate-pulse uppercase font-black text-[9px]">Live Voice Active</div>}
             {transcription && <div className="text-slate-300 italic p-3 border-l-2 border-blue-500 bg-blue-500/5">"{transcription}"</div>}
           </div>
           <div className="p-4 bg-slate-900 border-t border-slate-700">
             {isActive ? (
-              <Button variant="danger" className="w-full text-[10px] font-black uppercase py-4" onClick={stopSession}>De-authorize Terminal</Button>
+              <Button variant="danger" className="w-full text-[10px] font-black uppercase py-4" onClick={stopSession}>Disconnect Voice</Button>
             ) : (
               <Button className="w-full text-[10px] font-black uppercase py-4" onClick={startLiveSession}>
                 <Mic size={14} className="mr-2" /> Connect Voice Terminal
