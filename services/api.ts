@@ -1,25 +1,34 @@
 
 import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount } from '../types';
 
-// Updated storage key to force a clean production-ready database
 const USERS_STORAGE_KEY = 'abacusx_prod_v1';
+const LOGS_STORAGE_KEY = 'abacusx_logs_v1';
 export const DB_UPDATE_EVENT = 'abacusx_db_updated';
 export const SYSTEM_LOG_EVENT = 'abacusx_system_log';
 
-// Robust Broadcast Channel for cross-tab synchronization
 const syncChannel = new BroadcastChannel('abacusx_sync_channel');
-
-// GENESIS CONFIG: Only this email can be the initial admin
 const GENESIS_ADMIN_EMAIL = 'admin@abacusx.financial';
 
 const INITIAL_USERS: User[] = [];
 
+const getStoredLogs = (): any[] => {
+  const stored = localStorage.getItem(LOGS_STORAGE_KEY);
+  return stored ? JSON.parse(stored) : [];
+};
+
+const saveLog = (log: any) => {
+  const logs = getStoredLogs();
+  const updatedLogs = [log, ...logs].slice(0, 100); // Keep last 100 logs
+  localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(updatedLogs));
+};
+
 const logSystemEvent = (message: string, type: 'INFO' | 'SUCCESS' | 'WARNING' = 'INFO') => {
-  const event = new CustomEvent(SYSTEM_LOG_EVENT, { 
-    detail: { message, type, timestamp: new Date().toISOString() } 
-  });
+  const log = { message, type, timestamp: new Date().toISOString() };
+  saveLog(log);
+  
+  const event = new CustomEvent(SYSTEM_LOG_EVENT, { detail: log });
   window.dispatchEvent(event);
-  syncChannel.postMessage({ type: 'LOG', detail: { message, type, timestamp: new Date().toISOString() } });
+  syncChannel.postMessage({ type: 'LOG', detail: log });
 };
 
 const getStoredUsers = (): User[] => {
@@ -60,15 +69,13 @@ setInterval(() => {
 export const api = {
   getCurrentPrices: () => currentPrices,
 
+  getSystemLogs: async () => getStoredLogs(),
+
   login: async (email: string, password: string): Promise<User> => {
     const users = getStoredUsers();
-    // In a real app, we would hash the password. For this simulation, we check plaintext.
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (!user) throw new Error('Invalid credentials');
-    
-    // Simple mock password check (assuming password is just "password" or same as name for demo)
-    // Real prod apps MUST use Bcrypt/Argon2 on backend.
-    logSystemEvent(`Session started: ${user.fullName} (${user.role})`, 'SUCCESS');
+    logSystemEvent(`Session established: ${user.fullName}`, 'SUCCESS');
     return user;
   },
 
@@ -80,8 +87,6 @@ export const api = {
       throw new Error('Node collision: User exists');
     }
     
-    // SECURITY FIX: New users are ALWAYS UserRole.USER.
-    // Admin role can only be assigned by the system (Genesis) or an existing admin via the panel.
     const isGenesisAdmin = normalizedEmail === GENESIS_ADMIN_EMAIL;
     const assignedRole = isGenesisAdmin ? UserRole.ADMIN : UserRole.USER;
     
@@ -97,7 +102,7 @@ export const api = {
     };
     
     saveUsers([...users, newUser]);
-    logSystemEvent(`New node registered: ${fullName} as ${assignedRole}`, 'SUCCESS');
+    logSystemEvent(`Node provisioned: ${fullName} (${assignedRole})`, 'INFO');
     return newUser;
   },
 
@@ -113,7 +118,7 @@ export const api = {
     if (index !== -1) {
       users[index].adminDisplayAdjustment = data;
       saveUsers(users);
-      logSystemEvent(`Ledger adjusted for UID: ${userId}`, 'WARNING');
+      logSystemEvent(`Ledger Override: UID ${userId} -> ${data.amount} ${data.currency}`, 'WARNING');
       return users[index];
     }
     return undefined;
@@ -130,7 +135,7 @@ export const api = {
     if (index !== -1) {
       users[index].kycStatus = KYCStatus.PENDING;
       saveUsers(users);
-      logSystemEvent(`KYC Payload received for UID: ${userId}`, 'INFO');
+      logSystemEvent(`KYC Package transmitted: UID ${userId}`, 'INFO');
       return true;
     }
     return false;

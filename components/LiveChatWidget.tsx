@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
-import { MessageCircle, X, Mic, Send, Headset, ShieldCheck, Lock } from 'lucide-react';
+import { MessageCircle, X, Mic, Send, Headset, ShieldCheck, Lock, Terminal } from 'lucide-react';
 import { Button } from './ui';
 import { api } from '../services/api';
 import { UserRole, User } from '../types';
@@ -33,6 +33,17 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
     }
   };
 
+  const getSystemTelemetry: FunctionDeclaration = {
+    name: 'getSystemTelemetry',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Retrieve the most recent audit logs from the kernel. PRIVILEGED ACCESS ONLY.',
+      properties: {
+        count: { type: Type.INTEGER, description: 'Number of recent logs to retrieve.' }
+      }
+    }
+  };
+
   const startLiveSession = async () => {
     if (!process.env.API_KEY) {
       console.error("Missing API Key for Live Support");
@@ -61,27 +72,32 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
             scriptProcessor.connect(audioContextRef.current!.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
-            // SECURITY CHECK: Tool execution
             if (msg.toolCall?.functionCalls) {
               for (const fc of msg.toolCall.functionCalls) {
-                if (fc.name === 'queryNodeStatus') {
-                  // Only allow Admins to use this tool
-                  if (currentUser?.role !== UserRole.ADMIN) {
-                    sessionPromise.then(s => s.sendToolResponse({
-                      functionResponses: { 
-                        id: fc.id, 
-                        name: fc.name, 
-                        response: { result: 'ERROR: ACCESS_DENIED. You are not authorized to query user nodes. Please refer the user to human compliance staff.' } 
-                      }
-                    }));
-                    continue;
-                  }
+                // SECURITY CHECK: All tools require Admin role
+                if (currentUser?.role !== UserRole.ADMIN) {
+                  sessionPromise.then(s => s.sendToolResponse({
+                    functionResponses: { 
+                      id: fc.id, 
+                      name: fc.name, 
+                      response: { result: 'ERROR: ACCESS_DENIED. This operation requires Institutional Security Clearance.' } 
+                    }
+                  }));
+                  continue;
+                }
 
+                if (fc.name === 'queryNodeStatus') {
                   const users = await api.getUsers();
                   const args = fc.args as { email?: string };
                   const found = users.find(u => u.email.toLowerCase() === (args?.email || '').toLowerCase());
-                  const result = found ? `SUCCESS: User ${found.fullName} identified. KYC: ${found.kycStatus}. Registered: ${found.joinedAt}.` : 'FAILURE: No record found for this identifier.';
-                  
+                  const result = found ? `SUCCESS: Node ${found.fullName} found. KYC: ${found.kycStatus}.` : 'FAILURE: Node not found.';
+                  sessionPromise.then(s => s.sendToolResponse({
+                    functionResponses: { id: fc.id, name: fc.name, response: { result } }
+                  }));
+                } else if (fc.name === 'getSystemTelemetry') {
+                  const logs = await api.getSystemLogs();
+                  const args = fc.args as { count?: number };
+                  const result = JSON.stringify(logs.slice(0, args?.count || 5));
                   sessionPromise.then(s => s.sendToolResponse({
                     functionResponses: { id: fc.id, name: fc.name, response: { result } }
                   }));
@@ -111,13 +127,13 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
         },
         config: {
           responseModalities: [Modality.AUDIO],
-          tools: [{ functionDeclarations: [queryNodeStatus] }],
-          systemInstruction: `You are the AbacusX AI Support Agent. You represent an institutional crypto asset firm. 
-          Your tone is highly professional and security-conscious. 
-          CURRENT USER STATUS: ${currentUser ? `${currentUser.fullName} (${currentUser.role})` : 'UNAUTHENTICATED'}.
-          If an unauthenticated user asks for PII or account details, refuse and ask them to sign in.
-          If an ADMIN asks, use the queryNodeStatus tool. 
-          If a regular USER asks about themselves, explain that you can check their status if they provide their node email, but the queryNodeStatus tool will only work for you if they are verified.`,
+          tools: [{ functionDeclarations: [queryNodeStatus, getSystemTelemetry] }],
+          systemInstruction: `You are the AbacusX AI Support Terminal. 
+          Your role is to assist Institutional Admins with node management and system telemetry.
+          USER ROLE: ${currentUser?.role || 'UNAUTHENTICATED'}.
+          If an ADMIN asks about system health or recent events, use getSystemTelemetry.
+          If a user asks about nodes, use queryNodeStatus.
+          ALWAYS refuse sensitive data if the user is not an ADMIN.`,
           outputAudioTranscription: {}
         }
       });
@@ -163,8 +179,8 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
         <div className="w-80 md:w-96 bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4">
           <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700">
             <div className="flex items-center space-x-3">
-              <Headset size={20} className="text-blue-500" />
-              <h4 className="text-xs font-black text-white uppercase">AI Support Terminal</h4>
+              <Terminal size={18} className="text-blue-500" />
+              <h4 className="text-[10px] font-black text-white uppercase tracking-widest">Admin Support Node</h4>
             </div>
             <button onClick={() => { stopSession(); setIsOpen(false); }} className="text-slate-500 hover:text-white transition-colors">
               <X size={20} />
@@ -172,21 +188,17 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
           </div>
           <div className="h-96 p-4 overflow-y-auto space-y-4 bg-slate-950 font-mono text-[11px] leading-relaxed">
             <div className="text-blue-500 opacity-50 flex items-center">
-              <ShieldCheck size={12} className="mr-2" /> ENCRYPTED CHANNEL INITIALIZED
+              <ShieldCheck size={12} className="mr-2" /> SESSION ENCRYPTED (AES-256)
             </div>
-            <div className="text-slate-500">Subject: {currentUser?.fullName || 'Guest Node'}</div>
-            {isActive && <div className="text-green-500 animate-pulse">LIVE VOICE SYNCHRONIZATION: ACTIVE</div>}
-            {!isActive && <div className="p-4 bg-blue-900/10 border border-blue-500/20 rounded-xl text-blue-400 text-center">
-              Voice authentication required to initiate protocol.
-            </div>}
-            {transcription && <div className="text-slate-300 italic p-2 border-l-2 border-slate-700 bg-slate-900/50">"{transcription}"</div>}
+            {isActive && <div className="text-green-500 animate-pulse uppercase font-black text-[9px]">Live Voice Active</div>}
+            {transcription && <div className="text-slate-300 italic p-3 border-l-2 border-blue-500 bg-blue-500/5">"{transcription}"</div>}
           </div>
           <div className="p-4 bg-slate-900 border-t border-slate-700">
             {isActive ? (
-              <Button variant="danger" className="w-full text-[10px] font-black uppercase py-4" onClick={stopSession}>Terminate Link</Button>
+              <Button variant="danger" className="w-full text-[10px] font-black uppercase py-4" onClick={stopSession}>De-authorize Terminal</Button>
             ) : (
               <Button className="w-full text-[10px] font-black uppercase py-4" onClick={startLiveSession}>
-                <Mic size={14} className="mr-2" /> Start Voice Session
+                <Mic size={14} className="mr-2" /> Connect Voice Terminal
               </Button>
             )}
           </div>
