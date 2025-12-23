@@ -16,8 +16,8 @@ export const Login: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: st
     try {
       const user = await api.login(email, password);
       onLogin(user);
-    } catch (err) {
-      setError('Invalid credentials.');
+    } catch (err: any) {
+      setError(err.message || 'Login failed.');
     } finally {
       setLoading(false);
     }
@@ -31,25 +31,28 @@ export const Login: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: st
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-sm font-medium text-slate-300">Email</label>
-            <input 
+            <label htmlFor="email" className="text-sm font-medium text-slate-300">Email</label>
+            <input
+              id="email"
               className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              type="email" 
-              placeholder="Enter your email"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
               required
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-300">Password</label>
-            <input 
+            <label htmlFor="password"  className="text-sm font-medium text-slate-300">Password</label>
+            <input
+              id="password"
               className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              type="password" 
+              type="password"
               placeholder="••••••••"
               required
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
           </div>
           

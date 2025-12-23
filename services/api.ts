@@ -1,9 +1,11 @@
 
-import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount } from '../types';
+import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount, ChatMessage } from '../types';
 
 // Updated storage key to force a clean production-ready database
 export const USERS_STORAGE_KEY = 'abacusx_prod_v1';
+const CHAT_MESSAGES_STORAGE_KEY = 'abacusx_chat_messages_v1';
 export const DB_UPDATE_EVENT = 'abacusx_db_updated';
+export const CHAT_UPDATE_EVENT = 'abacusx_chat_updated';
 export const SYSTEM_LOG_EVENT = 'abacusx_system_log';
 
 // Robust Broadcast Channel for cross-tab synchronization
@@ -124,5 +126,31 @@ export const api = {
       return true;
     }
     return false;
+  },
+
+  getChatMessages: async (): Promise<ChatMessage[]> => {
+    const stored = localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+    if (!stored) return [];
+    try {
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  sendChatMessage: async (sender: User, text: string): Promise<ChatMessage> => {
+    const messages = await api.getChatMessages();
+    const newMessage: ChatMessage = {
+      id: `msg${Date.now()}`,
+      sender,
+      text,
+      timestamp: new Date().toISOString()
+    };
+    const updatedMessages = [...messages, newMessage];
+    localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(updatedMessages));
+    window.dispatchEvent(new CustomEvent(CHAT_UPDATE_EVENT));
+    syncChannel.postMessage({ type: 'CHAT_UPDATED' });
+    return newMessage;
   }
 };

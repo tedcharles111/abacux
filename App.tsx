@@ -122,7 +122,7 @@ export default function App() {
   return (
     <>
       {renderContent()}
-      {user && <LiveChatWidget />}
+      {user && <LiveChatWidget user={user} />}
     </>
   );
 }

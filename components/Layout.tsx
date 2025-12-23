@@ -83,7 +83,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, onLogout, curren
                 <p className="text-xs text-slate-500 truncate">{user?.email}</p>
               </div>
             </div>
-            <button 
+            <button
+              aria-label="Sign Out"
               onClick={onLogout}
               className="w-full flex items-center justify-center space-x-2 p-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
             >

@@ -69,3 +69,10 @@ export interface ActiveInvestment {
   accruedInterest: number;
   status: 'ACTIVE' | 'COMPLETED';
 }
+
+export interface ChatMessage {
+  id: string;
+  sender: User;
+  text: string;
+  timestamp: string;
+}
