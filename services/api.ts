@@ -2,7 +2,7 @@
 import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount } from '../types';
 
 // Updated storage key to force a clean production-ready database
-const USERS_STORAGE_KEY = 'abacusx_prod_v1';
+export const USERS_STORAGE_KEY = 'abacusx_prod_v1';
 export const DB_UPDATE_EVENT = 'abacusx_db_updated';
 export const SYSTEM_LOG_EVENT = 'abacusx_system_log';
 

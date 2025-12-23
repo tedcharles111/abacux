@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../../types';
-import { api, DB_UPDATE_EVENT } from '../../services/api';
+import { api, DB_UPDATE_EVENT, USERS_STORAGE_KEY } from '../../services/api';
 import { Badge, Button } from '../../components/ui';
 import { RefreshCw, Search, Filter, Download, Activity, Database } from 'lucide-react';
 
@@ -50,7 +50,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ onNavigate, onSelectUser
     };
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'abacusx_users_db') {
+      if (e.key === USERS_STORAGE_KEY) {
         fetchUsers(true);
       }
     };
