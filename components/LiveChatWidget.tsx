@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
 import { X, Mic, Headset, ShieldCheck, Terminal } from 'lucide-react';
 import { Button } from './ui';
@@ -150,24 +150,45 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
               <Terminal size={18} className="text-blue-500" />
               <h4 className="text-[10px] font-black text-white uppercase tracking-widest">Support Terminal</h4>
             </div>
-            <button onClick={() => { stopSession(); setIsOpen(false); }} className="text-slate-500 hover:text-white p-1">
+            <button 
+              onClick={() => { stopSession(); setIsOpen(false); }} 
+              className="text-slate-500 hover:text-white p-2 focus:outline-none"
+            >
               <X size={20} />
             </button>
           </div>
           <div className="h-96 p-4 overflow-y-auto bg-slate-950 font-mono text-[11px]">
             <div className="text-blue-500 opacity-50 flex items-center mb-4"><ShieldCheck size={12} className="mr-2" /> ENCRYPTED</div>
             {transcription && <div className="text-slate-300 italic">"{transcription}"</div>}
+            {!transcription && !isActive && <div className="text-slate-700 uppercase tracking-widest text-[9px]">Awaiting node connection...</div>}
           </div>
           <div className="p-4 bg-slate-900 border-t border-slate-700">
             {isActive ? (
-              <Button variant="danger" size="md" className="w-full" onClick={stopSession}>Disconnect</Button>
+              <Button 
+                variant="danger" 
+                size="md" 
+                className="w-full uppercase font-black tracking-widest text-[10px] py-4" 
+                onClick={stopSession}
+              >
+                Disconnect
+              </Button>
             ) : (
-              <Button variant="primary" size="md" className="w-full" onClick={startLiveSession}><Mic size={14} className="mr-2" /> Connect</Button>
+              <Button 
+                variant="primary" 
+                size="md" 
+                className="w-full uppercase font-black tracking-widest text-[10px] py-4" 
+                onClick={startLiveSession}
+              >
+                <Mic size={14} className="mr-2" /> Connect Terminal
+              </Button>
             )}
           </div>
         </div>
       ) : (
-        <button onClick={() => setIsOpen(true)} className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-2xl border-4 border-slate-900">
+        <button 
+          onClick={() => setIsOpen(true)} 
+          className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-2xl border-4 border-slate-900 hover:scale-110 transition-transform duration-200"
+        >
           <Headset size={28} />
           {isActive && <span className="absolute top-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-pulse"></span>}
         </button>

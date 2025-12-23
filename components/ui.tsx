@@ -1,13 +1,10 @@
 
 import React from 'react';
 
-// Explicitly define the allowed sizes to ensure the compiler recognizes 'icon'
-export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
-
+// Explicitly define types inline within the interface to ensure absolute compiler visibility
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
+  variant?: 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
+  size?: 'sm' | 'md' | 'lg' | 'icon';
   isLoading?: boolean;
 }
 
@@ -21,7 +18,7 @@ export const Button: React.FC<ButtonProps> = ({
 }) => {
   const baseStyle = "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed";
   
-  const variants: Record<ButtonVariant, string> = {
+  const variants = {
     primary: "bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500",
     secondary: "bg-slate-700 hover:bg-slate-600 text-white focus:ring-slate-500",
     danger: "bg-red-600 hover:bg-red-700 text-white focus:ring-red-500",
@@ -29,16 +26,20 @@ export const Button: React.FC<ButtonProps> = ({
     ghost: "text-slate-400 hover:text-white hover:bg-slate-800/50"
   };
 
-  const sizes: Record<ButtonSize, string> = {
+  const sizes = {
     sm: "px-3 py-1.5 text-sm",
     md: "px-4 py-2 text-base",
     lg: "px-6 py-3 text-lg",
     icon: "p-2 w-10 h-10"
   };
 
+  // Safe lookup for sizes with a reliable fallback
+  const sizeClass = sizes[size as keyof typeof sizes] || sizes.md;
+  const variantClass = variants[variant as keyof typeof variants] || variants.primary;
+
   return (
     <button 
-      className={`${baseStyle} ${variants[variant]} ${sizes[size as ButtonSize] || sizes.md} ${className}`} 
+      className={`${baseStyle} ${variantClass} ${sizeClass} ${className}`} 
       disabled={isLoading || props.disabled}
       {...props}
     >
