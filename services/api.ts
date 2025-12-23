@@ -1,11 +1,12 @@
 
 import { User, UserRole, KYCStatus, Transaction, InvestmentPlan, ActiveInvestment, AdminDisplayAmount } from '../types';
 
-const USERS_STORAGE_KEY = 'abacusx_users_db';
+// Updated storage key to force a clean production-ready database
+const USERS_STORAGE_KEY = 'abacusx_prod_v1';
 export const DB_UPDATE_EVENT = 'abacusx_db_updated';
 export const SYSTEM_LOG_EVENT = 'abacusx_system_log';
 
-// Robust Broadcast Channel
+// Robust Broadcast Channel for cross-tab synchronization
 const syncChannel = new BroadcastChannel('abacusx_sync_channel');
 
 const INITIAL_USERS: User[] = [];
@@ -57,7 +58,8 @@ export const api = {
   getCurrentPrices: () => currentPrices,
 
   login: async (email: string, password: string): Promise<User> => {
-    const user = getStoredUsers().find(u => u.email.toLowerCase() === email.toLowerCase());
+    const users = getStoredUsers();
+    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (!user) throw new Error('Invalid credentials');
     logSystemEvent(`Session started: ${user.fullName} (${user.role})`, 'SUCCESS');
     return user;
@@ -69,21 +71,23 @@ export const api = {
       throw new Error('Node collision: User exists');
     }
     
-    // Assign ADMIN role to the first user, then USER for everyone else
-    const assignedRole = users.length === 0 ? UserRole.ADMIN : UserRole.USER;
+    // PRODUCTION LOGIC: First user is ALWAYS Admin. Others are standard Users.
+    const isFirstUser = users.length === 0;
+    const assignedRole = isFirstUser ? UserRole.ADMIN : UserRole.USER;
     
     const newUser: User = {
       id: `u${Date.now()}`,
       email: email.toLowerCase(),
       fullName,
       role: assignedRole,
-      kycStatus: assignedRole === UserRole.ADMIN ? KYCStatus.VERIFIED : KYCStatus.UNVERIFIED,
+      kycStatus: isFirstUser ? KYCStatus.VERIFIED : KYCStatus.UNVERIFIED,
       balance: { btc: 0, eth: 0, usdt: 0, usd: 0 },
       twoFactorEnabled: false,
       joinedAt: new Date().toISOString()
     };
+    
     saveUsers([...users, newUser]);
-    logSystemEvent(`New node registered: ${fullName} (${assignedRole})`, 'SUCCESS');
+    logSystemEvent(`New node registered: ${fullName} as ${assignedRole}`, 'SUCCESS');
     return newUser;
   },
 
