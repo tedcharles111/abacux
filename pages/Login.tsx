@@ -1,10 +1,11 @@
+
 import React, { useState } from 'react';
 import { api } from '../services/api';
 import { User } from '../types';
 
 export const Login: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: string) => void }> = ({ onLogin, onNavigate }) => {
-  const [email, setEmail] = useState('admin@abacusx.com');
-  const [password, setPassword] = useState('password');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -34,6 +35,8 @@ export const Login: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: st
             <input 
               className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               type="email" 
+              placeholder="Enter your email"
+              required
               value={email} 
               onChange={(e) => setEmail(e.target.value)} 
             />
@@ -43,6 +46,8 @@ export const Login: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: st
             <input 
               className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               type="password" 
+              placeholder="••••••••"
+              required
               value={password} 
               onChange={(e) => setPassword(e.target.value)} 
             />
@@ -66,15 +71,6 @@ export const Login: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: st
               Sign Up
             </button>
           </p>
-        </div>
-
-        <div className="mt-8 pt-6 border-t border-slate-800 text-center text-xs text-slate-500">
-          <p className="font-semibold mb-1">Demo Credentials:</p>
-          <div className="flex justify-between px-4">
-             <span>User: user@abacusx.com</span>
-             <span>Admin: admin@abacusx.com</span>
-          </div>
-          <p className="mt-1">Pass: password</p>
         </div>
       </div>
     </div>

@@ -8,28 +8,7 @@ export const SYSTEM_LOG_EVENT = 'abacusx_system_log';
 // Robust Broadcast Channel
 const syncChannel = new BroadcastChannel('abacusx_sync_channel');
 
-const INITIAL_USERS: User[] = [
-  {
-    id: 'u1',
-    email: 'user@abacusx.com',
-    fullName: 'Alex Trader',
-    role: UserRole.USER,
-    kycStatus: KYCStatus.VERIFIED,
-    balance: { btc: 0.05, eth: 1.2, usdt: 1540.00, usd: 50.00 },
-    twoFactorEnabled: true,
-    joinedAt: '2024-01-15T10:00:00Z',
-  },
-  {
-    id: 'a1',
-    email: 'admin@abacusx.com',
-    fullName: 'Sys Admin',
-    role: UserRole.ADMIN,
-    kycStatus: KYCStatus.VERIFIED,
-    balance: { btc: 0, eth: 0, usdt: 0, usd: 0 },
-    twoFactorEnabled: true,
-    joinedAt: '2023-11-01T09:00:00Z',
-  }
-];
+const INITIAL_USERS: User[] = [];
 
 const logSystemEvent = (message: string, type: 'INFO' | 'SUCCESS' | 'WARNING' = 'INFO') => {
   const event = new CustomEvent(SYSTEM_LOG_EVENT, { 
@@ -89,18 +68,22 @@ export const api = {
     if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
       throw new Error('Node collision: User exists');
     }
+    
+    // Assign ADMIN role to the first user, then USER for everyone else
+    const assignedRole = users.length === 0 ? UserRole.ADMIN : UserRole.USER;
+    
     const newUser: User = {
       id: `u${Date.now()}`,
       email: email.toLowerCase(),
       fullName,
-      role: UserRole.USER,
-      kycStatus: KYCStatus.UNVERIFIED,
+      role: assignedRole,
+      kycStatus: assignedRole === UserRole.ADMIN ? KYCStatus.VERIFIED : KYCStatus.UNVERIFIED,
       balance: { btc: 0, eth: 0, usdt: 0, usd: 0 },
       twoFactorEnabled: false,
       joinedAt: new Date().toISOString()
     };
     saveUsers([...users, newUser]);
-    logSystemEvent(`New node registered: ${fullName} (${email})`, 'SUCCESS');
+    logSystemEvent(`New node registered: ${fullName} (${assignedRole})`, 'SUCCESS');
     return newUser;
   },
 
