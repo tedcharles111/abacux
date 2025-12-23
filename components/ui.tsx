@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-// Button
+// Explicitly define the allowed sizes to ensure the compiler recognizes 'icon'
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
 
@@ -12,7 +12,12 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button: React.FC<ButtonProps> = ({ 
-  children, variant = 'primary', size = 'md', isLoading, className = '', ...props 
+  children, 
+  variant = 'primary', 
+  size = 'md', 
+  isLoading, 
+  className = '', 
+  ...props 
 }) => {
   const baseStyle = "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed";
   
@@ -33,7 +38,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button 
-      className={`${baseStyle} ${variants[variant]} ${sizes[size]} ${className}`} 
+      className={`${baseStyle} ${variants[variant]} ${sizes[size as ButtonSize] || sizes.md} ${className}`} 
       disabled={isLoading || props.disabled}
       {...props}
     >

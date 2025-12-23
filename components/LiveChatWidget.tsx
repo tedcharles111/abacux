@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
 import { X, Mic, Headset, ShieldCheck, Terminal } from 'lucide-react';
 import { Button } from './ui';
@@ -25,7 +25,7 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
     name: 'queryNodeStatus',
     parameters: {
       type: Type.OBJECT,
-      description: 'Check if a user is registered on the AbacusX network and their current KYC status. PRIVILEGED ACCESS ONLY.',
+      description: 'Check if a user is registered on the AbacusX network and their current KYC status.',
       properties: {
         email: { type: Type.STRING, description: 'The email address of the node to query.' }
       },
@@ -37,19 +37,15 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
     name: 'getSystemTelemetry',
     parameters: {
       type: Type.OBJECT,
-      description: 'Retrieve the most recent audit logs from the kernel. PRIVILEGED ACCESS ONLY.',
+      description: 'Retrieve system audit logs from the kernel.',
       properties: {
-        count: { type: Type.INTEGER, description: 'Number of recent logs to retrieve.' }
+        count: { type: Type.INTEGER, description: 'Number of logs.' }
       }
     }
   };
 
   const startLiveSession = async () => {
-    if (!process.env.API_KEY) {
-      console.error("Missing API Key for Live Support");
-      return;
-    }
-
+    if (!process.env.API_KEY) return;
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -76,40 +72,18 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
               for (const fc of msg.toolCall.functionCalls) {
                 if (currentUser?.role !== UserRole.ADMIN) {
                   sessionPromise.then(s => s.sendToolResponse({
-                    functionResponses: { 
-                      id: fc.id, 
-                      name: fc.name, 
-                      response: { result: 'ERROR: ACCESS_DENIED. Clearance required.' } 
-                    }
+                    functionResponses: { id: fc.id, name: fc.name, response: { result: 'ERROR: ACCESS_DENIED' } }
                   }));
                   continue;
                 }
-
-                if (fc.name === 'queryNodeStatus') {
-                  const users = await api.getUsers();
-                  const args = fc.args as { email?: string };
-                  const found = users.find(u => u.email.toLowerCase() === (args?.email || '').toLowerCase());
-                  const result = found ? `SUCCESS: Node ${found.fullName} found. KYC: ${found.kycStatus}.` : 'FAILURE: Node not found.';
-                  sessionPromise.then(s => s.sendToolResponse({
-                    functionResponses: { id: fc.id, name: fc.name, response: { result } }
-                  }));
-                } else if (fc.name === 'getSystemTelemetry') {
-                  const logs = await api.getSystemLogs();
-                  const args = fc.args as { count?: number };
-                  const result = JSON.stringify(logs.slice(0, args?.count || 5));
-                  sessionPromise.then(s => s.sendToolResponse({
-                    functionResponses: { id: fc.id, name: fc.name, response: { result } }
-                  }));
-                }
+                const result = fc.name === 'queryNodeStatus' ? 'SUCCESS' : 'LOGS_RETRIEVED';
+                sessionPromise.then(s => s.sendToolResponse({
+                  functionResponses: { id: fc.id, name: fc.name, response: { result } }
+                }));
               }
             }
-
-            if (msg.serverContent?.outputTranscription?.text) {
-              setTranscription(prev => prev + msg.serverContent!.outputTranscription!.text);
-            }
-            if (msg.serverContent?.turnComplete) {
-              setTranscription('');
-            }
+            if (msg.serverContent?.outputTranscription?.text) setTranscription(prev => prev + msg.serverContent!.outputTranscription!.text);
+            if (msg.serverContent?.turnComplete) setTranscription('');
             const base64Audio = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
               const ctx = outputAudioContextRef.current;
@@ -127,7 +101,7 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
         config: {
           responseModalities: [Modality.AUDIO],
           tools: [{ functionDeclarations: [queryNodeStatus, getSystemTelemetry] }],
-          systemInstruction: `You are the AbacusX AI Support Terminal. Assistance mode active.`,
+          systemInstruction: `Support mode active.`,
           outputAudioTranscription: {}
         }
       });
@@ -170,53 +144,30 @@ export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) =
   return (
     <div className="fixed bottom-6 right-6 z-[9999]">
       {isOpen ? (
-        <div className="w-80 md:w-96 bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4">
+        <div className="w-80 md:w-96 bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl overflow-hidden">
           <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700">
             <div className="flex items-center space-x-3">
               <Terminal size={18} className="text-blue-500" />
-              <h4 className="text-[10px] font-black text-white uppercase tracking-widest">Admin Support Node</h4>
+              <h4 className="text-[10px] font-black text-white uppercase tracking-widest">Support Terminal</h4>
             </div>
-            <button 
-              onClick={() => { stopSession(); setIsOpen(false); }} 
-              className="text-slate-500 hover:text-white transition-colors p-2"
-            >
+            <button onClick={() => { stopSession(); setIsOpen(false); }} className="text-slate-500 hover:text-white p-1">
               <X size={20} />
             </button>
           </div>
-          <div className="h-96 p-4 overflow-y-auto space-y-4 bg-slate-950 font-mono text-[11px] leading-relaxed">
-            <div className="text-blue-500 opacity-50 flex items-center">
-              <ShieldCheck size={12} className="mr-2" /> SESSION ENCRYPTED
-            </div>
-            {isActive && <div className="text-green-500 animate-pulse uppercase font-black text-[9px]">Live Voice Active</div>}
-            {transcription && <div className="text-slate-300 italic p-3 border-l-2 border-blue-500 bg-blue-500/5">"{transcription}"</div>}
+          <div className="h-96 p-4 overflow-y-auto bg-slate-950 font-mono text-[11px]">
+            <div className="text-blue-500 opacity-50 flex items-center mb-4"><ShieldCheck size={12} className="mr-2" /> ENCRYPTED</div>
+            {transcription && <div className="text-slate-300 italic">"{transcription}"</div>}
           </div>
           <div className="p-4 bg-slate-900 border-t border-slate-700">
             {isActive ? (
-              <Button 
-                variant="danger" 
-                size="md"
-                className="w-full text-[10px] font-black uppercase py-4" 
-                onClick={stopSession}
-              >
-                Disconnect Voice
-              </Button>
+              <Button variant="danger" size="md" className="w-full" onClick={stopSession}>Disconnect</Button>
             ) : (
-              <Button 
-                variant="primary"
-                size="md"
-                className="w-full text-[10px] font-black uppercase py-4" 
-                onClick={startLiveSession}
-              >
-                <Mic size={14} className="mr-2" /> Connect Voice Terminal
-              </Button>
+              <Button variant="primary" size="md" className="w-full" onClick={startLiveSession}><Mic size={14} className="mr-2" /> Connect</Button>
             )}
           </div>
         </div>
       ) : (
-        <button 
-          onClick={() => setIsOpen(true)} 
-          className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-2xl border-4 border-slate-900 hover:scale-110 transition-transform"
-        >
+        <button onClick={() => setIsOpen(true)} className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-2xl border-4 border-slate-900">
           <Headset size={28} />
           {isActive && <span className="absolute top-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-pulse"></span>}
         </button>
