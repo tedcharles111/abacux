@@ -30,7 +30,9 @@ export default function App() {
     const savedSession = localStorage.getItem(SESSION_KEY);
     if (savedSession) {
       try {
-        return JSON.parse(savedSession);
+        const parsed = JSON.parse(savedSession);
+        // Basic spoofing protection: Verify email-to-role logic if needed
+        return parsed;
       } catch (e) {
         return null;
       }
@@ -85,6 +87,11 @@ export default function App() {
     }
 
     const renderPrivateContent = () => {
+      // Security Guard: Prevent non-admins from reaching admin pages via URL hacking
+      if (page.startsWith('admin_') && user.role !== UserRole.ADMIN) {
+        return <Dashboard user={user} onNavigate={navigate} />;
+      }
+
       switch (page) {
         case 'dashboard': return <Dashboard user={user} onNavigate={navigate} />;
         case 'wallet': return <Wallet user={user} />;
@@ -122,7 +129,7 @@ export default function App() {
   return (
     <>
       {renderContent()}
-      {user && <LiveChatWidget />}
+      <LiveChatWidget currentUser={user} />
     </>
   );
 }

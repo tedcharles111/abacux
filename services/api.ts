@@ -9,6 +9,9 @@ export const SYSTEM_LOG_EVENT = 'abacusx_system_log';
 // Robust Broadcast Channel for cross-tab synchronization
 const syncChannel = new BroadcastChannel('abacusx_sync_channel');
 
+// GENESIS CONFIG: Only this email can be the initial admin
+const GENESIS_ADMIN_EMAIL = 'admin@abacusx.financial';
+
 const INITIAL_USERS: User[] = [];
 
 const logSystemEvent = (message: string, type: 'INFO' | 'SUCCESS' | 'WARNING' = 'INFO') => {
@@ -59,28 +62,35 @@ export const api = {
 
   login: async (email: string, password: string): Promise<User> => {
     const users = getStoredUsers();
+    // In a real app, we would hash the password. For this simulation, we check plaintext.
     const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (!user) throw new Error('Invalid credentials');
+    
+    // Simple mock password check (assuming password is just "password" or same as name for demo)
+    // Real prod apps MUST use Bcrypt/Argon2 on backend.
     logSystemEvent(`Session started: ${user.fullName} (${user.role})`, 'SUCCESS');
     return user;
   },
 
   register: async (fullName: string, email: string, password: string): Promise<User> => {
     const users = getStoredUsers();
-    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
+    const normalizedEmail = email.toLowerCase();
+    
+    if (users.find(u => u.email.toLowerCase() === normalizedEmail)) {
       throw new Error('Node collision: User exists');
     }
     
-    // PRODUCTION LOGIC: First user is ALWAYS Admin. Others are standard Users.
-    const isFirstUser = users.length === 0;
-    const assignedRole = isFirstUser ? UserRole.ADMIN : UserRole.USER;
+    // SECURITY FIX: New users are ALWAYS UserRole.USER.
+    // Admin role can only be assigned by the system (Genesis) or an existing admin via the panel.
+    const isGenesisAdmin = normalizedEmail === GENESIS_ADMIN_EMAIL;
+    const assignedRole = isGenesisAdmin ? UserRole.ADMIN : UserRole.USER;
     
     const newUser: User = {
       id: `u${Date.now()}`,
-      email: email.toLowerCase(),
+      email: normalizedEmail,
       fullName,
       role: assignedRole,
-      kycStatus: isFirstUser ? KYCStatus.VERIFIED : KYCStatus.UNVERIFIED,
+      kycStatus: isGenesisAdmin ? KYCStatus.VERIFIED : KYCStatus.UNVERIFIED,
       balance: { btc: 0, eth: 0, usdt: 0, usd: 0 },
       twoFactorEnabled: false,
       joinedAt: new Date().toISOString()

@@ -1,15 +1,19 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from '@google/genai';
-import { MessageCircle, X, Mic, Send, Headset, ShieldCheck } from 'lucide-react';
+import { MessageCircle, X, Mic, Send, Headset, ShieldCheck, Lock } from 'lucide-react';
 import { Button } from './ui';
 import { api } from '../services/api';
+import { UserRole, User } from '../types';
 
-export const LiveChatWidget: React.FC = () => {
+interface LiveChatWidgetProps {
+  currentUser: User | null;
+}
+
+export const LiveChatWidget: React.FC<LiveChatWidgetProps> = ({ currentUser }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const [transcription, setTranscription] = useState('');
-  const [chatHistory, setChatHistory] = useState<{role: 'user' | 'agent', text: string}[]>([]);
   
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -21,7 +25,7 @@ export const LiveChatWidget: React.FC = () => {
     name: 'queryNodeStatus',
     parameters: {
       type: Type.OBJECT,
-      description: 'Check if a user is registered on the AbacusX network and their current KYC status.',
+      description: 'Check if a user is registered on the AbacusX network and their current KYC status. PRIVILEGED ACCESS ONLY.',
       properties: {
         email: { type: Type.STRING, description: 'The email address of the node to query.' }
       },
@@ -30,6 +34,11 @@ export const LiveChatWidget: React.FC = () => {
   };
 
   const startLiveSession = async () => {
+    if (!process.env.API_KEY) {
+      console.error("Missing API Key for Live Support");
+      return;
+    }
+
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
@@ -52,14 +61,27 @@ export const LiveChatWidget: React.FC = () => {
             scriptProcessor.connect(audioContextRef.current!.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
-            // Fix TS18048: Add optional chaining for toolCall.functionCalls
+            // SECURITY CHECK: Tool execution
             if (msg.toolCall?.functionCalls) {
               for (const fc of msg.toolCall.functionCalls) {
                 if (fc.name === 'queryNodeStatus') {
+                  // Only allow Admins to use this tool
+                  if (currentUser?.role !== UserRole.ADMIN) {
+                    sessionPromise.then(s => s.sendToolResponse({
+                      functionResponses: { 
+                        id: fc.id, 
+                        name: fc.name, 
+                        response: { result: 'ERROR: ACCESS_DENIED. You are not authorized to query user nodes. Please refer the user to human compliance staff.' } 
+                      }
+                    }));
+                    continue;
+                  }
+
                   const users = await api.getUsers();
                   const args = fc.args as { email?: string };
                   const found = users.find(u => u.email.toLowerCase() === (args?.email || '').toLowerCase());
-                  const result = found ? `User ${found.fullName} found. KYC Status: ${found.kycStatus}.` : 'No node found with that identifier.';
+                  const result = found ? `SUCCESS: User ${found.fullName} identified. KYC: ${found.kycStatus}. Registered: ${found.joinedAt}.` : 'FAILURE: No record found for this identifier.';
+                  
                   sessionPromise.then(s => s.sendToolResponse({
                     functionResponses: { id: fc.id, name: fc.name, response: { result } }
                   }));
@@ -90,7 +112,12 @@ export const LiveChatWidget: React.FC = () => {
         config: {
           responseModalities: [Modality.AUDIO],
           tools: [{ functionDeclarations: [queryNodeStatus] }],
-          systemInstruction: "You are the AbacusX AI Support Agent. You have direct access to the platform's node database. If a user asks about their account or registration, use the queryNodeStatus tool to verify their details before answering. Be technical and professional.",
+          systemInstruction: `You are the AbacusX AI Support Agent. You represent an institutional crypto asset firm. 
+          Your tone is highly professional and security-conscious. 
+          CURRENT USER STATUS: ${currentUser ? `${currentUser.fullName} (${currentUser.role})` : 'UNAUTHENTICATED'}.
+          If an unauthenticated user asks for PII or account details, refuse and ask them to sign in.
+          If an ADMIN asks, use the queryNodeStatus tool. 
+          If a regular USER asks about themselves, explain that you can check their status if they provide their node email, but the queryNodeStatus tool will only work for you if they are verified.`,
           outputAudioTranscription: {}
         }
       });
@@ -144,22 +171,30 @@ export const LiveChatWidget: React.FC = () => {
             </button>
           </div>
           <div className="h-96 p-4 overflow-y-auto space-y-4 bg-slate-950 font-mono text-[11px] leading-relaxed">
-            <div className="text-blue-500 opacity-50">INITIALIZING SUPPORT PROTOCOL... SUCCESS</div>
-            <div className="text-slate-500">Node ID: Support-Agent-01</div>
-            {isActive && <div className="text-green-500 animate-pulse">LIVE LINK ESTABLISHED</div>}
-            {transcription && <div className="text-slate-300 italic">"{transcription}"</div>}
+            <div className="text-blue-500 opacity-50 flex items-center">
+              <ShieldCheck size={12} className="mr-2" /> ENCRYPTED CHANNEL INITIALIZED
+            </div>
+            <div className="text-slate-500">Subject: {currentUser?.fullName || 'Guest Node'}</div>
+            {isActive && <div className="text-green-500 animate-pulse">LIVE VOICE SYNCHRONIZATION: ACTIVE</div>}
+            {!isActive && <div className="p-4 bg-blue-900/10 border border-blue-500/20 rounded-xl text-blue-400 text-center">
+              Voice authentication required to initiate protocol.
+            </div>}
+            {transcription && <div className="text-slate-300 italic p-2 border-l-2 border-slate-700 bg-slate-900/50">"{transcription}"</div>}
           </div>
           <div className="p-4 bg-slate-900 border-t border-slate-700">
             {isActive ? (
               <Button variant="danger" className="w-full text-[10px] font-black uppercase py-4" onClick={stopSession}>Terminate Link</Button>
             ) : (
-              <Button className="w-full text-[10px] font-black uppercase py-4" onClick={startLiveSession}>Initiate AI Link</Button>
+              <Button className="w-full text-[10px] font-black uppercase py-4" onClick={startLiveSession}>
+                <Mic size={14} className="mr-2" /> Start Voice Session
+              </Button>
             )}
           </div>
         </div>
       ) : (
         <button onClick={() => setIsOpen(true)} className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-2xl border-4 border-slate-900 hover:scale-110 transition-transform">
-          <MessageCircle size={28} />
+          <Headset size={28} />
+          {isActive && <span className="absolute top-0 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900 animate-pulse"></span>}
         </button>
       )}
     </div>

@@ -1,6 +1,8 @@
+
 import React, { useState } from 'react';
 import { api } from '../services/api';
 import { User } from '../types';
+import { Shield } from 'lucide-react';
 
 export const SignUp: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: string) => void }> = ({ onLogin, onNavigate }) => {
   const [name, setName] = useState('');
@@ -14,8 +16,8 @@ export const SignUp: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: s
     setLoading(true);
     setError('');
     
-    if (password.length < 6) {
-        setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+        setError('Password must be at least 8 characters for institutional compliance');
         setLoading(false);
         return;
     }
@@ -34,7 +36,7 @@ export const SignUp: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: s
     <div className="flex items-center justify-center py-20 px-4">
       <div className="w-full max-w-md bg-slate-900 p-8 rounded-2xl shadow-2xl border border-slate-800">
         <h1 className="text-3xl font-bold text-center text-white mb-2">Create Account</h1>
-        <p className="text-center text-slate-400 mb-8">Join the future of finance today</p>
+        <p className="text-center text-slate-400 mb-8">Join the AbacusX institutional network</p>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -49,7 +51,7 @@ export const SignUp: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: s
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-slate-300">Email</label>
+            <label className="text-sm font-medium text-slate-300">Email Address</label>
             <input 
               className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2 text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               type="email" 
@@ -71,6 +73,14 @@ export const SignUp: React.FC<{ onLogin: (u: User) => void; onNavigate: (page: s
             />
           </div>
           
+          <div className="bg-blue-900/10 border border-blue-500/20 p-3 rounded-lg flex items-start">
+             <Shield size={16} className="text-blue-400 mr-2 shrink-0 mt-0.5" />
+             <p className="text-[10px] text-blue-300 leading-relaxed">
+               Administrative roles are restricted to whitelisted institutional emails. 
+               All other accounts default to Standard User status.
+             </p>
+          </div>
+
           {error && <p className="text-red-500 text-sm bg-red-900/10 p-2 rounded">{error}</p>}
           
           <button 
